@@ -1,14 +1,23 @@
 steps:
-  - id: backend-quality
+  - id: backend-dependencies
     name: ghcr.io/astral-sh/uv:latest
-    entrypoint: sh
-    args:
-      - -c
-      - |
-        cd backend
-        uv sync --locked --all-groups
-        uv run ruff check .
-        uv run ty check .
+    dir: backend
+    args: ["sync", "--locked", "--group", "code-quality"]
+
+  - id: backend-lint
+    name: ghcr.io/astral-sh/uv:latest
+    dir: backend
+    args: ["run", "ruff", "check", "."]
+
+  - id: backend-format
+    name: ghcr.io/astral-sh/uv:latest
+    dir: backend
+    args: ["run", "ruff", "format", "--check", "."]
+
+  - id: backend-typecheck
+    name: ghcr.io/astral-sh/uv:latest
+    dir: backend
+    args: ["run", "ty", "check", "."]
 
   - id: frontend-quality
     name: node:22-alpine
