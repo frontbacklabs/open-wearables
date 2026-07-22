@@ -76,8 +76,8 @@ steps:
 
 substitutions:
   _LOCATION: us-central1              # Artifact Registry region
-  _REGION: us-central1               # Cloud Run region
-  _REPOSITORY: open-wearables        # Artifact Registry repo name
+  _REGION: us-central1                # Cloud Run region
+  _REPOSITORY: ren-backend            # Artifact Registry repo name
   _BACKEND_SERVICE: open-wearables-backend
   _FRONTEND_SERVICE: open-wearables-frontend
 
