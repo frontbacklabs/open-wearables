@@ -76,8 +76,10 @@ done || echo "Warning: Could not register webhook event types with Svix. Will re
 
 # Init app
 echo "Starting the FastAPI application..."
+# Cloud Run (and most managed platforms) inject the listen port via $PORT; fall
+# back to API_PORT for local/compose runs, then to 8000.
 if [ "$ENVIRONMENT" = "local" ]; then
-    uv run fastapi dev app/main.py --host 0.0.0.0 --port "${API_PORT:-8000}"
+    uv run fastapi dev app/main.py --host 0.0.0.0 --port "${PORT:-${API_PORT:-8000}}"
 else
-    uv run fastapi run app/main.py --host 0.0.0.0 --port "${API_PORT:-8000}"
+    uv run fastapi run app/main.py --host 0.0.0.0 --port "${PORT:-${API_PORT:-8000}}"
 fi

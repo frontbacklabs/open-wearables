@@ -47,3 +47,7 @@ FROM python:3.13-slim
     ENV GIT_SHA=$GIT_SHA
 
     EXPOSE 8000
+
+    # Default entrypoint for platforms that don't override the command
+    # (e.g. Cloud Run). docker-compose still overrides this via `command:`.
+    CMD ["bash", "scripts/start/app.sh"]
