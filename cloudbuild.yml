@@ -1,0 +1,54 @@
+steps:
+  - id: backend-quality
+    name: ghcr.io/astral-sh/uv:latest
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        cd backend
+        uv sync --locked --all-groups
+        uv run ruff check .
+        uv run ty check .
+
+  - id: frontend-quality
+    name: node:22-alpine
+    entrypoint: sh
+    args:
+      - -c
+      - |
+        corepack enable
+        corepack prepare pnpm@10.13.1 --activate
+        cd frontend
+        pnpm install --frozen-lockfile
+        pnpm run lint
+        pnpm run format:check
+        pnpm run test
+
+  - id: build-backend
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=GIT_SHA=$COMMIT_SHA
+      - --tag=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/open-wearables-backend:$SHORT_SHA
+      - backend
+
+  - id: build-frontend
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/open-wearables-frontend:$SHORT_SHA
+      - frontend
+
+images:
+  - ${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/open-wearables-backend:$SHORT_SHA
+  - ${_LOCATION}-docker.pkg.dev/$PROJECT_ID/${_REPOSITORY}/open-wearables-frontend:$SHORT_SHA
+
+substitutions:
+  _LOCATION: us-central1
+  _REPOSITORY: open-wearables
+
+timeout: 1800s
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
