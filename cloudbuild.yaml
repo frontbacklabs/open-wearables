@@ -78,7 +78,7 @@ steps:
       # Secrets resolved from Secret Manager by Cloud Run at runtime
       # (ENV_VAR=SECRET_NAME:VERSION).
       - >-
-        --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,ADMIN_EMAIL=ren-admin-email:latest,ADMIN_PASSWORD=ren-admin-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest
+        --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,ADMIN_EMAIL=ren-admin-email:latest,ADMIN_PASSWORD=ren-admin-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
       - --quiet
 
   - id: build-frontend
