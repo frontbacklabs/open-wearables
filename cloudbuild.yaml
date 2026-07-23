@@ -19,9 +19,13 @@
 substitutions:
   _REGION: us-central1
   _BACKEND_IMAGE: us-central1-docker.pkg.dev/front-back-labs/ren-backend/open-wearables-backend
+  _WORKER_IMAGE: us-central1-docker.pkg.dev/front-back-labs/ren-backend/open-wearables-worker
+  _BEAT_IMAGE: us-central1-docker.pkg.dev/front-back-labs/ren-backend/open-wearables-beat
   _FRONTEND_IMAGE: us-central1-docker.pkg.dev/front-back-labs/ren-backend/open-wearables-frontend
   _BACKEND_SERVICE: open-wearables-backend
   _FRONTEND_SERVICE: open-wearables-frontend
+  _WORKER_SERVICE: open-wearables-worker
+  _BEAT_SERVICE: open-wearables-beat
   _BACKEND_SERVICE_ACCOUNT: open-wearables@front-back-labs.iam.gserviceaccount.com
   _FRONTEND_SERVICE_ACCOUNT: open-wearables@front-back-labs.iam.gserviceaccount.com
 
@@ -39,6 +43,7 @@ substitutions:
   _REDIS_HOST: 10.10.0.8
   _REDIS_PORT: "6379"
   _API_BASE_URL: https://open-wearables-backend-474939749306.us-central1.run.app
+  _API_PORT: "8080"
   _FRONTEND_URL: https://open-wearables-frontend-474939749306.us-central1.run.app
   _CORS_ALLOW_ALL: "true"
   _API_NAME: "Ren - Open Wearables API"
@@ -57,6 +62,39 @@ steps:
     name: gcr.io/cloud-builders/docker
     args: ["push", "--all-tags", "${_BACKEND_IMAGE}"]
 
+  # Celery worker: dedicated image built from backend/Dockerfile.worker. Its
+  # baked CMD runs scripts/start/worker_cloudrun.sh, so no command override is
+  # needed at deploy time.
+  - id: build-worker
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=GIT_SHA=$COMMIT_SHA
+      - --file=backend/Dockerfile.worker
+      - --tag=${_WORKER_IMAGE}:$SHORT_SHA
+      - --tag=${_WORKER_IMAGE}:latest
+      - backend
+
+  - id: push-worker
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "--all-tags", "${_WORKER_IMAGE}"]
+
+  # Celery beat: dedicated image built from backend/Dockerfile.beat. Its baked
+  # CMD runs scripts/start/beat_cloudrun.sh.
+  - id: build-beat
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=GIT_SHA=$COMMIT_SHA
+      - --file=backend/Dockerfile.beat
+      - --tag=${_BEAT_IMAGE}:$SHORT_SHA
+      - --tag=${_BEAT_IMAGE}:latest
+      - backend
+
+  - id: push-beat
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "--all-tags", "${_BEAT_IMAGE}"]
+
   - id: deploy-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
@@ -74,11 +112,66 @@ steps:
       # Non-secret config. Custom delimiter (^##^) so values may contain commas
       # (e.g. provider scopes).
       - >-
-        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##CORS_ALLOW_ALL=${_CORS_ALLOW_ALL}##API_NAME=${_API_NAME}
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##API_PORT=${_API_PORT}##FRONTEND_URL=${_FRONTEND_URL}##CORS_ALLOW_ALL=${_CORS_ALLOW_ALL}##API_NAME=${_API_NAME}
       # Secrets resolved from Secret Manager by Cloud Run at runtime
       # (ENV_VAR=SECRET_NAME:VERSION).
       - >-
         --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,ADMIN_EMAIL=ren-admin-email:latest,ADMIN_PASSWORD=ren-admin-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
+      - --quiet
+
+  # Celery worker: dedicated worker image (CMD runs worker_cloudrun.sh, which
+  # also starts a health server so it satisfies Cloud Run's $PORT probe).
+  # --min-instances=1 + --no-cpu-throttling keep it consuming the broker without
+  # inbound HTTP; not publicly invokable. It reuses the backend's
+  # env/secrets/Cloud SQL. NOTE: like the backend, it needs VPC egress to reach
+  # the private Redis IP (_REDIS_HOST); configure the same VPC connector /
+  # Direct VPC egress on this service.
+  - id: deploy-worker
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_WORKER_SERVICE}
+      - --image=${_WORKER_IMAGE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --min-instances=1
+      - --max-instances=1
+      - --no-cpu-throttling
+      - --no-allow-unauthenticated
+      - --service-account=${_BACKEND_SERVICE_ACCOUNT}
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      - >-
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}
+      - >-
+        --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
+      - --quiet
+
+  # Celery beat (scheduler): dedicated beat image (CMD runs beat_cloudrun.sh,
+  # which also starts a health server for the $PORT probe). MUST stay a single
+  # instance (--min-instances=1 --max-instances=1) or scheduled tasks fire
+  # multiple times. Same env/secrets/Cloud SQL/VPC requirements as the worker.
+  - id: deploy-beat
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_BEAT_SERVICE}
+      - --image=${_BEAT_IMAGE}:$SHORT_SHA
+      - --region=${_REGION}
+      - --platform=managed
+      - --min-instances=1
+      - --max-instances=1
+      - --no-cpu-throttling
+      - --no-allow-unauthenticated
+      - --service-account=${_BACKEND_SERVICE_ACCOUNT}
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      - >-
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}
+      - >-
+        --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
       - --quiet
 
   - id: build-frontend
@@ -111,6 +204,10 @@ steps:
 images:
   - ${_BACKEND_IMAGE}:$SHORT_SHA
   - ${_BACKEND_IMAGE}:latest
+  - ${_WORKER_IMAGE}:$SHORT_SHA
+  - ${_WORKER_IMAGE}:latest
+  - ${_BEAT_IMAGE}:$SHORT_SHA
+  - ${_BEAT_IMAGE}:latest
   - ${_FRONTEND_IMAGE}:$SHORT_SHA
   - ${_FRONTEND_IMAGE}:latest
 
