@@ -6,6 +6,15 @@
 #
 # The Cloud Build execution service account requires Artifact Registry Writer,
 # Cloud Run Admin, and Service Account User on both runtime service accounts.
+#
+# Runtime env vars for the backend Cloud Run service are supplied two ways:
+#   - Non-secret config via the _BACKEND_* substitutions below (--set-env-vars).
+#   - Secrets pulled from Secret Manager at runtime (--set-secrets). Cloud Run
+#     resolves these itself, so the RUNTIME service account
+#     (_BACKEND_SERVICE_ACCOUNT) needs the Secret Manager Secret Accessor role
+#     on each referenced secret. Create the secrets once, e.g.:
+#       printf 'value' | gcloud secrets create open-wearables-secret-key --data-file=-
+# Override any substitution per-environment on the Cloud Build trigger.
 
 substitutions:
   _REGION: us-central1
@@ -15,6 +24,24 @@ substitutions:
   _FRONTEND_SERVICE: open-wearables-frontend
   _BACKEND_SERVICE_ACCOUNT: open-wearables@front-back-labs.iam.gserviceaccount.com
   _FRONTEND_SERVICE_ACCOUNT: open-wearables@front-back-labs.iam.gserviceaccount.com
+
+  # --- Backend runtime config (non-secret) ---
+  _ENVIRONMENT: production
+  # Cloud SQL instance connection name (PROJECT:REGION:INSTANCE), mounted as a
+  # Unix socket on the service via --add-cloudsql-instances below.
+  _CLOUDSQL_INSTANCE: front-back-labs:us-central1:ren
+  # Absolute path => psycopg connects over the Cloud SQL Unix socket (see
+  # Settings.db_uri); no DB_PORT is needed. Keep in sync with _CLOUDSQL_INSTANCE.
+  # For a direct TCP/IP connection instead, set this to the host/IP, add
+  # DB_PORT back to --set-env-vars, and drop --add-cloudsql-instances.
+  _DB_HOST: /cloudsql/front-back-labs:us-central1:ren
+  _DB_NAME: open-wearables
+  _REDIS_HOST: 10.10.0.8
+  _REDIS_PORT: "6379"
+  _API_BASE_URL: https://open-wearables-backend-474939749306.us-central1.run.app
+  _FRONTEND_URL: https://open-wearables-frontend-474939749306.us-central1.run.app
+  _CORS_ALLOW_ALL: "true"
+  _API_NAME: "Ren - Open Wearables API"
 
 steps:
   - id: build-backend
@@ -42,6 +69,16 @@ steps:
       - --platform=managed
       - --allow-unauthenticated
       - --service-account=${_BACKEND_SERVICE_ACCOUNT}
+      # Mount the Cloud SQL instance as a Unix socket at /cloudsql/<instance>.
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      # Non-secret config. Custom delimiter (^##^) so values may contain commas
+      # (e.g. provider scopes).
+      - >-
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##CORS_ALLOW_ALL=${_CORS_ALLOW_ALL}##API_NAME=${_API_NAME}
+      # Secrets resolved from Secret Manager by Cloud Run at runtime
+      # (ENV_VAR=SECRET_NAME:VERSION).
+      - >-
+        --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,ADMIN_EMAIL=ren-admin-email:latest,ADMIN_PASSWORD=ren-admin-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest
       - --quiet
 
   - id: build-frontend
@@ -68,6 +105,7 @@ steps:
       - --platform=managed
       - --allow-unauthenticated
       - --service-account=${_FRONTEND_SERVICE_ACCOUNT}
+      - --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##VITE_API_URL=${_API_BASE_URL}
       - --quiet
 
 images:
