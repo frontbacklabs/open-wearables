@@ -354,11 +354,13 @@ class Settings(BaseSettings):
 
     @property
     def db_uri(self) -> str:
-        return (
-            f"postgresql+psycopg://"
-            f"{self.db_user}:{self.db_password.get_secret_value()}"
-            f"@{self.db_host}:{self.db_port}/{self.db_name}"
-        )
+        auth = f"{self.db_user}:{quote(self.db_password.get_secret_value(), safe='')}"
+        # An absolute db_host is a Unix socket directory (e.g. Cloud Run's
+        # /cloudsql/PROJECT:REGION:INSTANCE via --add-cloudsql-instances): psycopg
+        # connects over the socket, so no host:port goes in the netloc.
+        if self.db_host.startswith("/"):
+            return f"postgresql+psycopg://{auth}@/{self.db_name}?host={self.db_host}"
+        return f"postgresql+psycopg://{auth}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     # 0. pytest ini_options
     # 1. environment variables
