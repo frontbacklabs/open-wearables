@@ -27,15 +27,26 @@ from app.schemas.enums import AggregationMethod, DataGranularity, HealthScoreCat
 from app.schemas.model_crud.user_management import InvitationStatus
 from app.utils.mappings_meta import AutoRelMeta
 
+# Two independent pools over the same database, so their bounds are budgeted
+# together (see the notes on the settings). Both are explicit: leaving the async
+# engine unconfigured silently adds SQLAlchemy's default 5 + 10 on top of whatever
+# the sync engine is allowed.
 engine = create_engine(
     settings.db_uri,
     pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=30,
-    pool_timeout=30,
-    pool_recycle=3600,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_recycle=settings.db_pool_recycle,
 )
-async_engine = create_async_engine(settings.db_uri)
+async_engine = create_async_engine(
+    settings.db_uri,
+    pool_pre_ping=True,
+    pool_size=settings.db_async_pool_size,
+    max_overflow=settings.db_async_max_overflow,
+    pool_timeout=settings.db_pool_timeout,
+    pool_recycle=settings.db_pool_recycle,
+)
 
 
 def _prepare_sessionmaker(engine: Engine) -> sessionmaker:

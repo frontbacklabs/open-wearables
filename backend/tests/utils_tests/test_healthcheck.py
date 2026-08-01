@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.healthcheck import database_health, get_pool_status
+from app.config import settings
+from app.database import async_engine, engine
+from app.utils.healthcheck import database_health, get_async_pool_status, get_pool_status
 
 
 class TestGetPoolStatus:
@@ -212,3 +214,79 @@ class TestDatabaseHealth:
             assert result["status"] == "healthy"
             assert result["pool"] == expected_pool
             mock_pool_status.assert_called_once()
+
+
+class TestGetAsyncPoolStatus:
+    """Test suite for get_async_pool_status function."""
+
+    @patch("app.utils.healthcheck.async_engine")
+    def test_get_async_pool_status_returns_all_fields(self, mock_engine: MagicMock) -> None:
+        """Test that get_async_pool_status returns all required pool fields."""
+        # Arrange
+        mock_pool = MagicMock()
+        mock_pool.size.return_value = 2
+        mock_pool.checkedin.return_value = 1
+        mock_pool.checkedout.return_value = 1
+        mock_pool.overflow.return_value = 0
+        mock_engine.sync_engine.pool = mock_pool
+
+        # Act
+        result = get_async_pool_status()
+
+        # Assert
+        assert result == {
+            "max_pool_size": "2",
+            "connections_ready_for_reuse": "1",
+            "active_connections": "1",
+            "overflow": "0",
+        }
+
+    @pytest.mark.asyncio
+    async def test_database_health_reports_both_pools(self) -> None:
+        """The async pool is a second pool over the same database, so it must be visible.
+
+        Reporting only the sync pool hides up to half the connections a process
+        holds against the server's max_connections.
+        """
+        # Arrange
+        mock_db = MagicMock()
+
+        # Act
+        result = await database_health(mock_db)
+
+        # Assert
+        assert result["status"] == "healthy"
+        assert "pool" in result
+        assert "async_pool" in result
+
+
+class TestConnectionPoolBounds:
+    """The pool bounds are a connection budget; regressions here exhaust the server.
+
+    max_connections is per server, not per database, so unbounded pools here starve
+    every other service on the same instance (which is exactly what happened).
+    """
+
+    def test_sync_engine_uses_configured_bounds(self) -> None:
+        # Act
+        pool = engine.pool
+
+        # Assert
+        assert pool.size() == settings.db_pool_size  # ty:ignore[unresolved-attribute]
+        assert pool._max_overflow == settings.db_max_overflow  # ty:ignore[unresolved-attribute]
+
+    def test_async_engine_is_explicitly_bounded(self) -> None:
+        """An unconfigured async engine silently adds SQLAlchemy's default 5 + 10."""
+        # Act
+        pool = async_engine.sync_engine.pool
+
+        # Assert
+        assert pool.size() == settings.db_async_pool_size  # ty:ignore[unresolved-attribute]
+        assert pool._max_overflow == settings.db_async_max_overflow  # ty:ignore[unresolved-attribute]
+
+    def test_both_pools_are_pre_pinged_and_recycled(self) -> None:
+        """Stale connections must be discarded rather than surfaced as request errors."""
+        # Act / Assert
+        for pool in (engine.pool, async_engine.sync_engine.pool):
+            assert pool._pre_ping is True
+            assert pool._recycle == settings.db_pool_recycle

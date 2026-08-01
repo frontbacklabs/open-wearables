@@ -59,6 +59,26 @@ class Settings(BaseSettings):
     db_user: str = "open-wearables"
     db_password: SecretStr = SecretStr("open-wearables")
 
+    # Connection pool bounds — a budget against the *server's* max_connections,
+    # not a throughput dial. Closing a session returns its connection to the pool
+    # rather than to Postgres, so these numbers are the backends each process
+    # holds for as long as it lives. Every process counts: the API, the Celery
+    # worker and the Celery beat scheduler each build both engines below, and the
+    # worker/beat run with --min-instances=1 so their pools are never released.
+    # Total = (db_pool_size + db_max_overflow + db_async_pool_size +
+    # db_async_max_overflow) x processes, and it must fit under the server's
+    # max_connections *alongside every other service on that instance* —
+    # max_connections is per instance, not per database, so a co-tenant using a
+    # different database still draws from the same pot.
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    # The async engine is a second, independent pool over the same database; it
+    # backs fewer endpoints, so it gets a smaller share.
+    db_async_pool_size: int = 2
+    db_async_max_overflow: int = 3
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 3600
+
     # Sentry
     SENTRY_ENABLED: bool = False
     SENTRY_DSN: str | None = None
