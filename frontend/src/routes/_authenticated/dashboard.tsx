@@ -48,8 +48,8 @@ function DashboardPage() {
 
       <div className="relative space-y-6">
         <PageHeader
-          title="Dashboard"
-          description="Your platform overview and key metrics"
+          // title="Dashboard"
+          // description="Your platform overview and key metrics"
           badge={
             <div className="inline-flex items-center gap-2 rounded-full border border-[hsl(var(--success-muted)/0.3)] bg-[hsl(var(--success-muted)/0.08)] px-3 py-1">
               <span className="relative flex h-1.5 w-1.5">

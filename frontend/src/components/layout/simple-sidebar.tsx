@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 
 const menuItems = [
   {
-    title: 'Dashboard',
+    title: 'Overview',
     url: ROUTES.dashboard,
     icon: Home,
   },
@@ -63,9 +63,9 @@ export function SimpleSidebar() {
   return (
     <aside className="relative w-64 bg-black flex flex-col border-r border-border/40">
       {/* Header */}
-      <div className="p-4 border-b border-border/40">
+      {/* <div className="p-4 border-b border-border/40">
         <img src={logotype} alt="Open Wearables" className="h-auto" />
-      </div>
+      </div> */}
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1">

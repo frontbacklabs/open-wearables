@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface PageHeaderProps {
-  title: string;
+  title?: string;
   description?: string;
   /** Optional content rendered on the right (typically a primary action button). */
   action?: ReactNode;
