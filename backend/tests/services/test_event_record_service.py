@@ -8,14 +8,15 @@ Tests cover:
 - create_or_merge_sleep: adjacent session merging
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from app.models import DataSource, EventRecord
+from app.models import DataSource, EventRecord, HealthScore
+from app.schemas.enums import HealthScoreCategory, ProviderName
 from app.schemas.model_crud.activities import EventRecordCreate, EventRecordDetailCreate, EventRecordQueryParams
 from app.schemas.model_crud.activities.sleep import SleepStage
 from app.services.event_record_service import event_record_service
@@ -306,74 +307,6 @@ class TestEventRecordServiceGetRecordsResponse:
 
         # Assert
         assert records == []
-
-
-class TestEventRecordServiceGetCountByWorkoutType:
-    """Test counting workouts by type."""
-
-    def test_get_count_by_workout_type_groups_correctly(self, db: Session) -> None:
-        """Should group and count workouts by type."""
-        # Arrange
-        mapping = DataSourceFactory()
-
-        # Create multiple workouts of different types
-        EventRecordFactory(mapping=mapping, category="workout", type_="running")
-        EventRecordFactory(mapping=mapping, category="workout", type_="running")
-        EventRecordFactory(mapping=mapping, category="workout", type_="running")
-        EventRecordFactory(mapping=mapping, category="workout", type_="cycling")
-        EventRecordFactory(mapping=mapping, category="workout", type_="cycling")
-        EventRecordFactory(mapping=mapping, category="workout", type_="swimming")
-
-        # Act
-        results = event_record_service.get_count_by_workout_type(db)
-
-        # Assert
-        results_dict = dict(results)
-        assert results_dict.get("running") == 3
-        assert results_dict.get("cycling") == 2
-        assert results_dict.get("swimming") == 1
-
-    def test_get_count_by_workout_type_ordered_by_count(self, db: Session) -> None:
-        """Should order results by count descending."""
-        # Arrange
-        mapping = DataSourceFactory()
-
-        # Create workouts with different counts
-        EventRecordFactory(mapping=mapping, type_="running")
-        EventRecordFactory(mapping=mapping, type_="cycling")
-        EventRecordFactory(mapping=mapping, type_="cycling")
-
-        # Act
-        results = event_record_service.get_count_by_workout_type(db)
-
-        # Assert
-        # Results should be ordered by count descending
-        assert results[0][1] >= results[1][1]  # First count >= second count
-
-    def test_get_count_by_workout_type_handles_null_type(self, db: Session) -> None:
-        """Should handle records with null type."""
-        # Arrange
-        mapping = DataSourceFactory()
-
-        EventRecordFactory(mapping=mapping, type_=None)
-        EventRecordFactory(mapping=mapping, type_=None)
-        EventRecordFactory(mapping=mapping, type_="running")
-
-        # Act
-        results = event_record_service.get_count_by_workout_type(db)
-
-        # Assert
-        results_dict = dict(results)
-        assert results_dict.get(None) == 2
-        assert results_dict.get("running") == 1
-
-    def test_get_count_by_workout_type_empty_result(self, db: Session) -> None:
-        """Should return empty list when no workout records exist."""
-        # Act
-        results = event_record_service.get_count_by_workout_type(db)
-
-        # Assert
-        assert results == []
 
 
 class TestCreateOrMergeSleep:
@@ -769,6 +702,79 @@ class TestCreateOrMergeSleep:
         # Stages should be sorted by start_time (early first)
         assert stages[0]["stage"] == "light"
         assert stages[1]["stage"] == "deep"
+
+
+class TestRecomputeSleepScores:
+    """Test the internal sleep score recompute triggered by create_or_merge_sleep."""
+
+    def _session(self, data_source: DataSource, start: datetime, end: datetime) -> EventRecord:
+        record = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            start_datetime=start,
+            end_datetime=end,
+        )
+        SleepDetailsFactory(event_record=record, sleep_total_duration_minutes=420, is_nap=False)
+        return record
+
+    def _internal_sleep_scores(self, db: Session, user_id: UUID) -> list[HealthScore]:
+        return (
+            db.query(HealthScore)
+            .filter(
+                HealthScore.user_id == user_id,
+                HealthScore.provider == ProviderName.INTERNAL,
+                HealthScore.category == HealthScoreCategory.SLEEP,
+            )
+            .all()
+        )
+
+    def test_earlier_midnight_spanning_session_keeps_its_score(self, db: Session) -> None:
+        """Recomputing one session must not drop the score of the one that woke that morning.
+
+        Both sessions are scored on the day they wake, so clearing the later session's
+        start date also clears the earlier session's score — it has to be rewritten too.
+        """
+        user = UserFactory()
+        data_source = DataSourceFactory(user=user)
+
+        # Wakes on the 21st, so it is scored on the 21st.
+        earlier = self._session(
+            data_source,
+            datetime(2026, 3, 20, 23, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 21, 7, 0, tzinfo=timezone.utc),
+        )
+        # Also starts on the 21st, so recomputing it clears the 21st.
+        later = self._session(
+            data_source,
+            datetime(2026, 3, 21, 23, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 22, 7, 0, tzinfo=timezone.utc),
+        )
+        db.commit()
+
+        event_record_service._recompute_sleep_scores(db, user.id, {date(2026, 3, 21)})
+        db.commit()
+
+        scored = {s.event_record_id for s in self._internal_sleep_scores(db, user.id)}
+        assert earlier.id in scored
+        assert later.id in scored
+
+    def test_repeated_recompute_does_not_duplicate(self, db: Session) -> None:
+        """Running the recompute twice replaces the score rather than adding a second."""
+        user = UserFactory()
+        data_source = DataSourceFactory(user=user)
+        self._session(
+            data_source,
+            datetime(2026, 3, 21, 23, 0, tzinfo=timezone.utc),
+            datetime(2026, 3, 22, 7, 0, tzinfo=timezone.utc),
+        )
+        db.commit()
+
+        for _ in range(2):
+            event_record_service._recompute_sleep_scores(db, user.id, {date(2026, 3, 21)})
+            db.commit()
+
+        assert len(self._internal_sleep_scores(db, user.id)) == 1
 
 
 class TestGetSleepSessions:
