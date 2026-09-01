@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from sqlalchemy import text
+from sqlalchemy.pool import NullPool
 
 from app.database import DbSession, async_engine, engine
 
@@ -26,6 +27,10 @@ def get_async_pool_status() -> dict[str, str]:
     is actually holding.
     """
     pool = async_engine.sync_engine.pool
+    # NullPool (the default while no endpoint uses AsyncDbSession) holds nothing
+    # between uses and so implements none of the QueuePool counters.
+    if isinstance(pool, NullPool):
+        return {"pool_class": "NullPool", "max_pool_size": "0", "active_connections": "0"}
     return {
         "max_pool_size": str(pool.size()),  # ty:ignore[unresolved-attribute]
         "connections_ready_for_reuse": str(pool.checkedin()),  # ty:ignore[unresolved-attribute]

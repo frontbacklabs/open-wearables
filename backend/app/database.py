@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy import Date, DateTime, Engine, String, Text, create_engine, func, inspect
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -27,6 +28,11 @@ from app.schemas.enums import AggregationMethod, DataGranularity, HealthScoreCat
 from app.schemas.model_crud.user_management import InvitationStatus
 from app.utils.mappings_meta import AutoRelMeta
 
+# Applied per connection, so no query can pin a pooled connection indefinitely:
+# without it one slow statement holds its slot until the client gives up, and the
+# rest of the pool queues behind it.
+_CONNECT_ARGS = {"options": f"-c statement_timeout={settings.db_statement_timeout_ms}"}
+
 # Two independent pools over the same database, so their bounds are budgeted
 # together (see the notes on the settings). Both are explicit: leaving the async
 # engine unconfigured silently adds SQLAlchemy's default 5 + 10 on top of whatever
@@ -38,14 +44,27 @@ engine = create_engine(
     max_overflow=settings.db_max_overflow,
     pool_timeout=settings.db_pool_timeout,
     pool_recycle=settings.db_pool_recycle,
+    connect_args=_CONNECT_ARGS,
+)
+
+# A pool_size of 0 is not "unbounded" to QueuePool — it means a pool that can never
+# hand out a pooled connection — so an unused async engine has to be NullPool
+# instead, which connects on demand and reserves nothing between uses.
+_async_pool_kwargs: dict = (
+    {"poolclass": NullPool}
+    if settings.db_async_pool_size == 0
+    else {
+        "pool_size": settings.db_async_pool_size,
+        "max_overflow": settings.db_async_max_overflow,
+        "pool_timeout": settings.db_pool_timeout,
+        "pool_recycle": settings.db_pool_recycle,
+    }
 )
 async_engine = create_async_engine(
     settings.db_uri,
     pool_pre_ping=True,
-    pool_size=settings.db_async_pool_size,
-    max_overflow=settings.db_async_max_overflow,
-    pool_timeout=settings.db_pool_timeout,
-    pool_recycle=settings.db_pool_recycle,
+    connect_args=_CONNECT_ARGS,
+    **_async_pool_kwargs,
 )
 
 

@@ -101,19 +101,27 @@ steps:
   #
   # max_connections is a property of the *instance*, not the database, and
   # ${_CLOUDSQL_INSTANCE} is shared with the Ren API gateway (which uses the
-  # `postgres` database while we use `${_DB_NAME}`). Each of the three services
-  # below builds two pools (sync + async), and the worker and beat run with
+  # `postgres` database while we use `${_DB_NAME}`). The worker and beat run with
   # --min-instances=1, so their connections are held for the life of the revision
-  # rather than released between tasks. The code defaults are sized for a
-  # dedicated database (docker-compose); these overrides are the smaller share
-  # that fits a shared, small instance.
+  # rather than released between tasks.
   #
-  # Steady state (pool_size only, which is what stays open):
-  #   api 2x(2+1) + worker (2+1) + beat (1+1) = 9
-  # ...against 25 max_connections, minus ~3 reserved for superuser, ~4 held by
-  # cloudsqladmin, and the gateway's own pools. Bursts (max_overflow) can still
-  # exceed the instance limit: raising max_connections (a larger tier) is the
-  # actual headroom fix, and these numbers should grow with it.
+  # On the 2 vCPU / 8 GB tier, max_connections (~400) is no longer the binding
+  # constraint — the 2 vCPUs are. Postgres degrades when many backends are
+  # *simultaneously active*, so these bound useful concurrency rather than
+  # maximize it:
+  #   steady state (pool_size, what stays open): api 2x10 + worker 8 + beat 2 = 30
+  #   absolute peak (with max_overflow):        api 2x15 + worker 12 + beat 3 = 45
+  # ...leaving ample room for the gateway's own pools and the ~7 reserved for
+  # superuser/cloudsqladmin.
+  #
+  # DB_ASYNC_* stay 0: no endpoint takes AsyncDbSession, so that engine runs as a
+  # NullPool and reserves nothing. Give it a size only when something uses it, and
+  # take the budget out of the sync pool rather than adding it on top.
+  #
+  # These only hold if Cloud Run stops handing one instance more requests than its
+  # pool can serve — hence --concurrency on the backend, and --concurrency=8 on the
+  # Celery worker (in worker_cloudrun.sh). Raising a pool without raising the tier,
+  # or raising concurrency without raising the pool, just moves the queue.
   # ---------------------------------------------------------------------------
   - id: deploy-backend
     name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -129,13 +137,18 @@ steps:
       # Bounded because each instance holds its own pools; unbounded autoscaling
       # here means unbounded Postgres backends.
       - --max-instances=2
+      # Matched to the pool ceiling (DB_POOL_SIZE + DB_MAX_OVERFLOW = 15). The
+      # default of 80 lets one instance accept far more concurrent requests than
+      # it has connections for, so surplus requests block on pool checkout and
+      # time out instead of being queued (or scaled) by the platform.
+      - --concurrency=15
       - --service-account=${_BACKEND_SERVICE_ACCOUNT}
       # Mount the Cloud SQL instance as a Unix socket at /cloudsql/<instance>.
       - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
       # Non-secret config. Custom delimiter (^##^) so values may contain commas
       # (e.g. provider scopes).
       - >-
-        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##API_PORT=${_API_PORT}##FRONTEND_URL=${_FRONTEND_URL}##CORS_ALLOW_ALL=${_CORS_ALLOW_ALL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=2##DB_MAX_OVERFLOW=1##DB_ASYNC_POOL_SIZE=1##DB_ASYNC_MAX_OVERFLOW=1
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##API_PORT=${_API_PORT}##FRONTEND_URL=${_FRONTEND_URL}##CORS_ALLOW_ALL=${_CORS_ALLOW_ALL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=10##DB_MAX_OVERFLOW=5##DB_ASYNC_POOL_SIZE=0##DB_ASYNC_MAX_OVERFLOW=0
       # Secrets resolved from Secret Manager by Cloud Run at runtime
       # (ENV_VAR=SECRET_NAME:VERSION).
       - >-
@@ -166,7 +179,7 @@ steps:
       - --service-account=${_BACKEND_SERVICE_ACCOUNT}
       - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
       - >-
-        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=2##DB_MAX_OVERFLOW=1##DB_ASYNC_POOL_SIZE=1##DB_ASYNC_MAX_OVERFLOW=1
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=8##DB_MAX_OVERFLOW=4##DB_ASYNC_POOL_SIZE=0##DB_ASYNC_MAX_OVERFLOW=0
       - >-
         --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
       - --quiet
@@ -193,7 +206,7 @@ steps:
       - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
       # Beat only reads the schedule, so it gets the smallest pools of the three.
       - >-
-        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=1##DB_MAX_OVERFLOW=1##DB_ASYNC_POOL_SIZE=1##DB_ASYNC_MAX_OVERFLOW=0
+        --set-env-vars=^##^ENVIRONMENT=${_ENVIRONMENT}##DB_HOST=${_DB_HOST}##DB_NAME=${_DB_NAME}##REDIS_HOST=${_REDIS_HOST}##REDIS_PORT=${_REDIS_PORT}##API_BASE_URL=${_API_BASE_URL}##FRONTEND_URL=${_FRONTEND_URL}##API_NAME=${_API_NAME}##DB_POOL_SIZE=2##DB_MAX_OVERFLOW=1##DB_ASYNC_POOL_SIZE=0##DB_ASYNC_MAX_OVERFLOW=0
       - >-
         --set-secrets=DB_USER=ren-postgres-user-name:latest,DB_PASSWORD=ren-postgres-user-password:latest,WHOOP_CLIENT_ID=ren-whoop-client-id:latest,WHOOP_CLIENT_SECRET=ren-whoop-client-secret:latest,OURA_CLIENT_ID=ren-oura-client-id:latest,OURA_CLIENT_SECRET=ren-oura-client-secret:latest,GOOGLE_CLIENT_ID=ren-fitbit-client-id:latest,GOOGLE_CLIENT_SECRET=ren-fitbit-client-secret:latest,GOOGLE_PROJECT_ID=ren-gcp-project-number:latest,SECRET_KEY=ren-owear-secret-key:latest
       - --quiet

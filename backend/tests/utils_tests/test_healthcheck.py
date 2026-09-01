@@ -7,9 +7,10 @@ Tests database health check endpoint and pool status monitoring.
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
-from app.database import async_engine, engine
+from app.database import _CONNECT_ARGS, async_engine, engine
 from app.utils.healthcheck import database_health, get_async_pool_status, get_pool_status
 
 
@@ -281,12 +282,21 @@ class TestConnectionPoolBounds:
         pool = async_engine.sync_engine.pool
 
         # Assert
-        assert pool.size() == settings.db_async_pool_size  # ty:ignore[unresolved-attribute]
-        assert pool._max_overflow == settings.db_async_max_overflow  # ty:ignore[unresolved-attribute]
+        if settings.db_async_pool_size == 0:
+            # Nothing uses AsyncDbSession, so the engine reserves no connections at
+            # all. NullPool is the bound here: 0 is not a valid QueuePool size.
+            assert isinstance(pool, NullPool)
+        else:
+            assert pool.size() == settings.db_async_pool_size  # ty:ignore[unresolved-attribute]
+            assert pool._max_overflow == settings.db_async_max_overflow  # ty:ignore[unresolved-attribute]
 
-    def test_both_pools_are_pre_pinged_and_recycled(self) -> None:
+    def test_sync_pool_is_pre_pinged_and_recycled(self) -> None:
         """Stale connections must be discarded rather than surfaced as request errors."""
         # Act / Assert
-        for pool in (engine.pool, async_engine.sync_engine.pool):
-            assert pool._pre_ping is True
-            assert pool._recycle == settings.db_pool_recycle
+        assert engine.pool._pre_ping is True
+        assert engine.pool._recycle == settings.db_pool_recycle
+
+    def test_engines_bound_statement_duration(self) -> None:
+        """Without this a single slow query pins its connection until the client gives up."""
+        # Act / Assert
+        assert f"statement_timeout={settings.db_statement_timeout_ms}" in _CONNECT_ARGS["options"]

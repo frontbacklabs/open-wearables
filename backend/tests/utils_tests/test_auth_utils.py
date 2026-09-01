@@ -29,7 +29,7 @@ class TestGetCurrentDeveloper:
         token = create_access_token(subject=str(developer.id))
 
         # Act
-        result = await get_current_developer(db=db, token=token)
+        result = get_current_developer(db=db, token=token)
 
         # Assert
         assert result is not None
@@ -46,7 +46,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Could not validate credentials"
@@ -60,7 +60,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=invalid_token)
+            get_current_developer(db=db, token=invalid_token)
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Could not validate credentials"
@@ -75,7 +75,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Could not validate credentials"
@@ -89,7 +89,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         assert exc_info.value.status_code == 401
         assert exc_info.value.detail == "Could not validate credentials"
@@ -104,7 +104,7 @@ class TestGetCurrentDeveloper:
         # The auth code tries to create UUID() which raises ValueError
         # This should be caught and converted to HTTPException
         with pytest.raises((HTTPException, ValueError)) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         if isinstance(exc_info.value, HTTPException):
             assert exc_info.value.status_code == 401
@@ -120,7 +120,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=tampered_token)
+            get_current_developer(db=db, token=tampered_token)
 
         assert exc_info.value.status_code == 401
 
@@ -135,7 +135,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         assert exc_info.value.status_code == 401
 
@@ -147,7 +147,7 @@ class TestGetCurrentDeveloper:
 
         # Act & Assert
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=token)
+            get_current_developer(db=db, token=token)
 
         assert exc_info.value.status_code == 401
 
@@ -163,7 +163,7 @@ class TestGetCurrentDeveloperOptional:
         token = create_access_token(subject=str(developer.id))
 
         # Act
-        result = await get_current_developer_optional(db=db, token=token)
+        result = get_current_developer_optional(db=db, token=token)
 
         # Assert
         assert result is not None
@@ -174,7 +174,7 @@ class TestGetCurrentDeveloperOptional:
     async def test_get_current_developer_optional_no_token(self, db: Session) -> None:
         """Test behavior when no token is provided."""
         # Act
-        result = await get_current_developer_optional(db=db, token=None)
+        result = get_current_developer_optional(db=db, token=None)
 
         # Assert
         assert result is None
@@ -186,7 +186,7 @@ class TestGetCurrentDeveloperOptional:
         invalid_token = "invalid.jwt.token"
 
         # Act
-        result = await get_current_developer_optional(db=db, token=invalid_token)
+        result = get_current_developer_optional(db=db, token=invalid_token)
 
         # Assert
         assert result is None
@@ -199,7 +199,7 @@ class TestGetCurrentDeveloperOptional:
         token = create_access_token(subject=str(developer.id), expires_delta=timedelta(seconds=-1))
 
         # Act
-        result = await get_current_developer_optional(db=db, token=token)
+        result = get_current_developer_optional(db=db, token=token)
 
         # Assert
         assert result is None
@@ -212,7 +212,7 @@ class TestGetCurrentDeveloperOptional:
         token = jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
         # Act
-        result = await get_current_developer_optional(db=db, token=token)
+        result = get_current_developer_optional(db=db, token=token)
 
         # Assert
         assert result is None
@@ -225,7 +225,7 @@ class TestGetCurrentDeveloperOptional:
         token = create_access_token(subject=str(nonexistent_id))
 
         # Act
-        result = await get_current_developer_optional(db=db, token=token)
+        result = get_current_developer_optional(db=db, token=token)
 
         # Assert
         assert result is None
@@ -234,7 +234,7 @@ class TestGetCurrentDeveloperOptional:
     async def test_get_current_developer_optional_empty_token(self, db: Session) -> None:
         """Test behavior with empty string token."""
         # Act
-        result = await get_current_developer_optional(db=db, token="")
+        result = get_current_developer_optional(db=db, token="")
 
         # Assert
         assert result is None
@@ -248,7 +248,7 @@ class TestGetCurrentDeveloperOptional:
         tampered_token = token[:-5] + "xxxxx"
 
         # Act
-        result = await get_current_developer_optional(db=db, token=tampered_token)
+        result = get_current_developer_optional(db=db, token=tampered_token)
 
         # Assert
         assert result is None
@@ -267,7 +267,7 @@ class TestAuthWorkflow:
         token = create_access_token(subject=str(developer.id))
 
         # Assert - Token should be valid
-        authenticated_developer = await get_current_developer(db=db, token=token)
+        authenticated_developer = get_current_developer(db=db, token=token)
         assert authenticated_developer.id == developer.id
         assert authenticated_developer.email == developer.email
 
@@ -280,17 +280,17 @@ class TestAuthWorkflow:
         invalid_token = "invalid"
 
         # Act & Assert - Valid token works for both
-        result_required = await get_current_developer(db=db, token=valid_token)
-        result_optional = await get_current_developer_optional(db=db, token=valid_token)
+        result_required = get_current_developer(db=db, token=valid_token)
+        result_optional = get_current_developer_optional(db=db, token=valid_token)
         assert result_required.id == developer.id
         assert result_optional is not None
         assert result_optional.id == developer.id
 
         # Act & Assert - Invalid token: required raises, optional returns None
         with pytest.raises(HTTPException):
-            await get_current_developer(db=db, token=invalid_token)
+            get_current_developer(db=db, token=invalid_token)
 
-        result_optional_invalid = await get_current_developer_optional(db=db, token=invalid_token)
+        result_optional_invalid = get_current_developer_optional(db=db, token=invalid_token)
         assert result_optional_invalid is None
 
     @pytest.mark.asyncio
@@ -307,8 +307,8 @@ class TestAuthWorkflow:
         assert token1 != token2
 
         # Act & Assert - Each token authenticates correct developer
-        result1 = await get_current_developer(db=db, token=token1)
-        result2 = await get_current_developer(db=db, token=token2)
+        result1 = get_current_developer(db=db, token=token1)
+        result2 = get_current_developer(db=db, token=token2)
 
         assert result1.id == dev1.id
         assert result1.email == "dev1@example.com"
@@ -325,7 +325,7 @@ class TestAuthWorkflow:
         token1 = create_access_token(subject=str(dev1.id))
 
         # Act - Use dev1's token
-        authenticated_dev = await get_current_developer(db=db, token=token1)
+        authenticated_dev = get_current_developer(db=db, token=token1)
 
         # Assert - Should only authenticate as dev1, not dev2
         assert authenticated_dev.id == dev1.id
@@ -342,8 +342,8 @@ class TestAuthWorkflow:
         long_token = create_access_token(subject=str(developer.id), expires_delta=timedelta(days=7))
 
         # Assert - Both tokens should work while valid
-        result_short = await get_current_developer(db=db, token=short_token)
-        result_long = await get_current_developer(db=db, token=long_token)
+        result_short = get_current_developer(db=db, token=short_token)
+        result_long = get_current_developer(db=db, token=long_token)
 
         assert result_short.id == developer.id
         assert result_long.id == developer.id

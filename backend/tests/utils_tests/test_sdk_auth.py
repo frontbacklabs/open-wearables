@@ -18,7 +18,7 @@ class TestGetSDKAuth:
         user_id = "123e4567-e89b-12d3-a456-426614174000"
         token = create_sdk_user_token("app_123", user_id)
 
-        result = await get_sdk_auth(db=db, token=token, x_open_wearables_api_key=None)
+        result = get_sdk_auth(db=db, token=token, x_open_wearables_api_key=None)
 
         assert result.auth_type == "sdk_token"
         assert str(result.user_id) == user_id
@@ -29,7 +29,7 @@ class TestGetSDKAuth:
         """Valid API key should return SDKAuthContext."""
         api_key = ApiKeyFactory()
 
-        result = await get_sdk_auth(db=db, token=None, x_open_wearables_api_key=api_key.id)
+        result = get_sdk_auth(db=db, token=None, x_open_wearables_api_key=api_key.id)
 
         assert result.auth_type == "api_key"
         assert result.api_key_id == api_key.id
@@ -38,7 +38,7 @@ class TestGetSDKAuth:
     async def test_no_auth_raises_401(self, db: Session) -> None:
         """Missing auth should raise 401."""
         with pytest.raises(HTTPException) as exc_info:
-            await get_sdk_auth(db=db, token=None, x_open_wearables_api_key=None)
+            get_sdk_auth(db=db, token=None, x_open_wearables_api_key=None)
 
         assert exc_info.value.status_code == 401
 
@@ -46,7 +46,7 @@ class TestGetSDKAuth:
     async def test_invalid_api_key_raises_401(self, db: Session) -> None:
         """Invalid API key should raise 401."""
         with pytest.raises(HTTPException) as exc_info:
-            await get_sdk_auth(db=db, token=None, x_open_wearables_api_key="invalid_key")
+            get_sdk_auth(db=db, token=None, x_open_wearables_api_key="invalid_key")
 
         assert exc_info.value.status_code == 401
 
@@ -57,7 +57,7 @@ class TestGetSDKAuth:
         user_id = "123e4567-e89b-12d3-a456-426614174001"
         token = create_sdk_user_token("app_123", user_id)
 
-        result = await get_sdk_auth(db=db, token=token, x_open_wearables_api_key=api_key.id)
+        result = get_sdk_auth(db=db, token=token, x_open_wearables_api_key=api_key.id)
 
         assert result.auth_type == "sdk_token"
         assert str(result.user_id) == user_id
@@ -75,7 +75,7 @@ class TestSDKTokenBlockedFromDeveloperEndpoints:
         sdk_token = create_sdk_user_token("app_123", user_id)
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=sdk_token)
+            get_current_developer(db=db, token=sdk_token)
 
         assert exc_info.value.status_code == 401
         assert "SDK tokens cannot access this endpoint" in exc_info.value.detail
@@ -88,7 +88,7 @@ class TestSDKTokenBlockedFromDeveloperEndpoints:
         developer = DeveloperFactory()
         dev_token = create_access_token(subject=str(developer.id))
 
-        result = await get_current_developer(db=db, token=dev_token)
+        result = get_current_developer(db=db, token=dev_token)
 
         assert result.id == developer.id
 
@@ -96,6 +96,6 @@ class TestSDKTokenBlockedFromDeveloperEndpoints:
     async def test_no_token_raises_401(self, db: Session) -> None:
         """No token should raise 401."""
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_developer(db=db, token=None)
+            get_current_developer(db=db, token=None)
 
         assert exc_info.value.status_code == 401

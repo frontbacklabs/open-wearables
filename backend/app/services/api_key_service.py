@@ -56,11 +56,12 @@ class ApiKeyService(AppService[ApiKeyRepository, ApiKey, ApiKeyCreate, ApiKeyUpd
 api_key_service = ApiKeyService(log=getLogger(__name__))
 
 
-async def _require_api_key(
+def _require_api_key(
     db: DbSession,
     developer: Developer | None = Depends(get_current_developer_optional),
     x_open_wearables_api_key: str | None = Header(None, alias="X-Open-Wearables-API-Key"),
 ) -> str:
+    """Sync on purpose — blocking DB work, see :func:`app.utils.auth.get_current_developer`."""
     if developer:
         return str(developer.id)
     if x_open_wearables_api_key:

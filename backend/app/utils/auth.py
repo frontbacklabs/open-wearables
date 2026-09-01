@@ -15,13 +15,19 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=F
 developer_repository = DeveloperRepository(Developer)
 
 
-async def get_current_developer(
+def get_current_developer(
     db: DbSession,
     token: Annotated[str | None, Depends(oauth2_scheme)],
 ) -> Developer:
     """Get current authenticated developer from JWT token.
 
     SDK-scoped tokens are rejected - they can only access /sdk/ endpoints.
+
+    Deliberately ``def``, not ``async def``: the lookup below is a blocking
+    driver call, and on the event loop it stalls *every* in-flight request for
+    as long as it takes to get a pooled connection — turning a slow query into
+    an app-wide freeze. As a sync dependency FastAPI runs it in the threadpool,
+    so only this request waits.
     """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -56,13 +62,15 @@ async def get_current_developer(
     return developer
 
 
-async def get_current_developer_optional(
+def get_current_developer_optional(
     db: DbSession,
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
 ) -> Developer | None:
     """Get current authenticated developer from JWT token, or None if not authenticated.
 
     SDK-scoped tokens return None - they are not developer tokens.
+
+    Sync on purpose — see :func:`get_current_developer`.
     """
     if not token:
         return None
@@ -94,7 +102,7 @@ DeveloperDep = Annotated[Developer, Depends(get_current_developer)]
 DeveloperOptionalDep = Annotated[Developer | None, Depends(get_current_developer_optional)]
 
 
-async def get_sdk_auth(
+def get_sdk_auth(
     db: DbSession,
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
     x_open_wearables_api_key: str | None = Header(None, alias="X-Open-Wearables-API-Key"),
@@ -106,6 +114,8 @@ async def get_sdk_auth(
     - API key (X-Open-Wearables-API-Key header)
 
     Returns SDKAuthContext with auth_type and relevant identifiers.
+
+    Sync on purpose — see :func:`get_current_developer`.
     """
     # Import here to avoid circular imports
     from app.services.api_key_service import api_key_service

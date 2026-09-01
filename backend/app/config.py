@@ -72,12 +72,21 @@ class Settings(BaseSettings):
     # different database still draws from the same pot.
     db_pool_size: int = 5
     db_max_overflow: int = 5
-    # The async engine is a second, independent pool over the same database; it
-    # backs fewer endpoints, so it gets a smaller share.
-    db_async_pool_size: int = 2
-    db_async_max_overflow: int = 3
-    db_pool_timeout: int = 30
+    # The async engine is a second, independent pool over the same database. No
+    # endpoint takes AsyncDbSession today, so it defaults to 0/0 — NullPool, which
+    # opens a connection per use and closes it, reserving nothing. Give it a real
+    # size only when something actually starts using it, and take that budget out
+    # of the sync pool rather than adding it on top.
+    db_async_pool_size: int = 0
+    db_async_max_overflow: int = 0
+    # Short on purpose: a caller that cannot get a connection within a few seconds
+    # is queueing behind saturation, and waiting 30s only stacks retries on top of
+    # the jam. Fail fast and shed load instead.
+    db_pool_timeout: int = 5
     db_pool_recycle: int = 3600
+    # Server-side ceiling on any single statement (ms). A bigger pool means a
+    # runaway query pins more connections, not fewer, so bound it at the source.
+    db_statement_timeout_ms: int = 15000
 
     # Sentry
     SENTRY_ENABLED: bool = False

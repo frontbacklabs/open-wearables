@@ -14,8 +14,12 @@ set -e -x
 
 uv run python scripts/health_server.py &
 
+# --concurrency is pinned rather than left to default (the CPU count), because it
+# has to stay within DB_POOL_SIZE: this is one process with one shared pool, so
+# more worker threads than pooled connections just makes threads queue on checkout.
 exec uv run celery -A app.main:celery_app worker \
     --loglevel=info \
     --pool=threads \
+    --concurrency=8 \
     --prefetch-multiplier=1 \
     -Q default,sdk_sync,garmin_sync,webhook_sync
