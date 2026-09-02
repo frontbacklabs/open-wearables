@@ -23,6 +23,10 @@ class DataSource(BaseDbModel):
     __tablename__ = "data_source"
     __table_args__ = (
         Index("ix_data_source_user_provider", "user_id", "provider"),
+        # Not for querying: this is the child side of an ON DELETE SET NULL foreign key,
+        # which Postgres does not index for you. Without it, deleting a user_connection
+        # sequentially scans this table.
+        Index("ix_data_source_user_connection_id", "user_connection_id"),
         Index(
             "uq_data_source_identity",
             "user_id",
