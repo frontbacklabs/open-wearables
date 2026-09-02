@@ -12,6 +12,7 @@ Tests cover:
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.services import create_sdk_user_token, user_service
 from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory, fake_firebase_uid
 from tests.utils import api_key_headers, developer_auth_headers
 
@@ -437,8 +438,8 @@ class TestUpdateUser:
         # Assert
         assert response.status_code == 401
 
-    def test_update_user_requires_bearer_token(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
-        """Test updating user requires bearer token, not API key."""
+    def test_update_user_accepts_api_key(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """An API key may update a user, so a server-to-server mirror can push changes."""
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
@@ -449,8 +450,42 @@ class TestUpdateUser:
         # Act
         response = client.patch(f"{api_v1_prefix}/users/{user.id}", json=payload, headers=headers)
 
-        # Assert - API key auth is rejected, requires bearer token
+        # Assert
+        assert response.status_code == 200
+        assert response.json()["email"] == "new@example.com"
+
+    def test_update_user_still_accepts_developer_token(
+        self, client: TestClient, db: Session, api_v1_prefix: str
+    ) -> None:
+        """Widening to ApiKeyDep must not lock out the dashboard, which sends a JWT."""
+        # Arrange
+        developer = DeveloperFactory(email="test@example.com", password="test123")
+        user = UserFactory(email="user@example.com")
+        headers = developer_auth_headers(developer.id)
+
+        # Act
+        response = client.patch(f"{api_v1_prefix}/users/{user.id}", json={"first_name": "Renamed"}, headers=headers)
+
+        # Assert
+        assert response.status_code == 200
+        assert response.json()["first_name"] == "Renamed"
+
+    def test_update_user_rejects_sdk_token(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """An SDK token is scoped to one user and must not rewrite the account."""
+        # Arrange
+        user = UserFactory(email="user@example.com")
+        token = create_sdk_user_token(app_id="test-app", user_id=str(user.id))
+
+        # Act
+        response = client.patch(
+            f"{api_v1_prefix}/users/{user.id}",
+            json={"email": "hijacked@example.com"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Assert
         assert response.status_code == 401
+        assert user_service.get(db, user.id, raise_404=False).email == "user@example.com"
 
 
 class TestDeleteUser:
@@ -474,8 +509,6 @@ class TestDeleteUser:
         assert data["email"] == "user@example.com"
 
         # Verify user is deleted from database
-        from app.services import user_service
-
         deleted_user = user_service.get(db, user_id, raise_404=False)
         assert deleted_user is None
 
@@ -516,8 +549,12 @@ class TestDeleteUser:
         # Assert
         assert response.status_code == 401
 
-    def test_delete_user_requires_bearer_token(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
-        """Test deleting user requires bearer token, not API key."""
+    def test_delete_user_accepts_api_key(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """An API key may delete a user, so a server-to-server mirror can stay in sync.
+
+        The counterpart of POST /users, which has always taken an API key: a mirror that
+        can only be added to drifts as soon as a user is removed upstream.
+        """
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
@@ -527,5 +564,38 @@ class TestDeleteUser:
         # Act
         response = client.delete(f"{api_v1_prefix}/users/{user.id}", headers=headers)
 
-        # Assert - API key auth is rejected, requires bearer token
+        # Assert
+        assert response.status_code == 200
+        assert user_service.get(db, user.id, raise_404=False) is None
+
+    def test_delete_user_still_accepts_developer_token(
+        self, client: TestClient, db: Session, api_v1_prefix: str
+    ) -> None:
+        """Widening to ApiKeyDep must not lock out the dashboard, which sends a JWT."""
+        # Arrange
+        developer = DeveloperFactory(email="test@example.com", password="test123")
+        user = UserFactory(email="user@example.com")
+        headers = developer_auth_headers(developer.id)
+
+        # Act
+        response = client.delete(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        # Assert
+        assert response.status_code == 200
+        assert user_service.get(db, user.id, raise_404=False) is None
+
+    def test_delete_user_rejects_sdk_token(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """An SDK token is scoped to one user and must never delete an account."""
+        # Arrange
+        user = UserFactory(email="user@example.com")
+        token = create_sdk_user_token(app_id="test-app", user_id=str(user.id))
+
+        # Act
+        response = client.delete(
+            f"{api_v1_prefix}/users/{user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        # Assert
         assert response.status_code == 401
+        assert user_service.get(db, user.id, raise_404=False) is not None

@@ -10,7 +10,7 @@ from app.schemas.model_crud.user_management import (
     UserUpdate,
 )
 from app.schemas.utils import OldPaginatedResponse
-from app.services import ApiKeyDep, DeveloperDep, user_service
+from app.services import ApiKeyDep, user_service
 
 router = APIRouter()
 
@@ -59,10 +59,24 @@ def create_user(payload: UserCreate, db: DbSession, _api_key: ApiKeyDep):
 
 
 @router.delete("/users/{user_id}", response_model=UserRead)
-def delete_user(user_id: str, db: DbSession, _developer: DeveloperDep):
+def delete_user(user_id: str, db: DbSession, _api_key: ApiKeyDep):
+    """Delete a user and, by cascade, all of their data.
+
+    Takes an API key rather than a developer token so the systems that create users
+    server-to-server can also remove them: the user table mirrors the calling system's
+    one-to-one, and a mirror that can only be added to drifts the moment anything is
+    deleted upstream. ApiKeyDep still accepts a developer JWT, so dashboard callers are
+    unaffected.
+    """
     return user_service.delete(db, user_id, raise_404=True)
 
 
 @router.patch("/users/{user_id}", response_model=UserRead)
-def update_user(user_id: str, payload: UserUpdate, db: DbSession, _developer: DeveloperDep):
+def update_user(user_id: str, payload: UserUpdate, db: DbSession, _api_key: ApiKeyDep):
+    """Update a user's profile fields.
+
+    On an API key for the same reason as delete: a system that mirrors its users here
+    has to be able to push a profile change through, not just the create. ApiKeyDep also
+    accepts a developer JWT, so dashboard callers are unaffected.
+    """
     return user_service.update(db, user_id, payload, raise_404=True)
