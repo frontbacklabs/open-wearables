@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from app.database import DbSession
 from app.repositories.event_record_repository import EventRecordRepository
@@ -35,7 +34,7 @@ class SamsungWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -50,7 +49,7 @@ class SamsungWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: Any,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Samsung payloads are normalized via the import service.
 
@@ -66,10 +65,10 @@ class SamsungWorkouts(BaseWorkoutsTemplate):
             return start_timestamp, end_timestamp
         raise ValueError("Samsung Health expects datetime objects for timestamps")
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Samsung Health does not support cloud API - data is push-only."""
         return []
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Samsung Health does not support cloud API - data is push-only."""
         raise NotImplementedError("Samsung Health does not support API-based workout detail fetching")

@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from app.integrations.celery.tasks.garmin.backfill_task import start_full_backfill as start_garmin_full_backfill
 from app.services.providers.base_strategy import (
     BaseProviderStrategy,
@@ -81,7 +79,7 @@ class GarminStrategy(BaseProviderStrategy):
             health_scores=HEALTH_SCORES,
         )
 
-    def start_historical_sync(self, user_id: UUID, days: int) -> HistoricalSyncResult:
+    def start_historical_sync(self, user_id: str, days: int) -> HistoricalSyncResult:
         """Trigger Garmin's webhook-based 30-day backfill.
 
         The ``days`` parameter is ignored - Garmin limits historical access

@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import select, update
@@ -32,7 +31,7 @@ class UserInvitationCodeRepository(CrudRepository[UserInvitationCode, UserInvita
         db_session.refresh(invitation_code)
         return invitation_code
 
-    def revoke_active_for_user(self, db_session: DbSession, user_id: UUID) -> None:
+    def revoke_active_for_user(self, db_session: DbSession, user_id: str) -> None:
         """Revoke all active invitation codes for a user."""
         now = datetime.now(timezone.utc)
         stmt = (

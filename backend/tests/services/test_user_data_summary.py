@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +10,7 @@ from tests.factories import (
     EventRecordFactory,
     SeriesTypeDefinitionFactory,
     UserFactory,
+    fake_firebase_uid,
 )
 
 
@@ -118,7 +118,7 @@ class TestGetUserDataSummary:
 
     def test_nonexistent_user(self, db: Session) -> None:
         """Returns empty summary for a user ID with no data."""
-        result = system_info_service.get_user_data_summary(db, uuid4())
+        result = system_info_service.get_user_data_summary(db, fake_firebase_uid())
         assert result.total_data_points == 0
         assert result.by_provider == []
 

@@ -23,7 +23,6 @@ import math
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from logging import Logger, getLogger
-from uuid import UUID
 
 from app.algorithms.config_algorithms import resilience_config
 from app.algorithms.resilience import calculate_hrv_cv, calculate_rmssd, calculate_sdnn
@@ -74,7 +73,7 @@ class ResilienceScoreService:
     def _query_data_series(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         type_id: int,
         start_dt: datetime,
         end_dt: datetime,
@@ -85,7 +84,7 @@ class ResilienceScoreService:
     def _extract_asleep_windows(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_dt: datetime,
         end_dt: datetime,
         allowed_stages: frozenset[SleepStageType],
@@ -208,7 +207,7 @@ class ResilienceScoreService:
     def get_hrv_cv_score(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         reference_date: date,
     ) -> HrvCvScoreResult:
         """Calculate the HRV coefficient of variation for a configurable lookback window.
@@ -225,7 +224,7 @@ class ResilienceScoreService:
 
         Args:
             db_session: Active database session.
-            user_id: UUID of the user.
+            user_id: str of the user.
             reference_date: Exclusive end date of the lookback window (typically today).
 
         Returns:
@@ -307,7 +306,7 @@ class ResilienceScoreService:
     def calculate_rmssd_ow(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_dt: datetime,
         end_dt: datetime,
         deep_sleep_only: bool = False,
@@ -323,7 +322,7 @@ class ResilienceScoreService:
 
         Args:
             db_session: Active database session.
-            user_id: UUID of the user.
+            user_id: str of the user.
             start_dt: Start of the period (inclusive).
             end_dt: End of the period (exclusive).
             deep_sleep_only: When True, restrict HR data to deep-sleep windows only.
@@ -352,7 +351,7 @@ class ResilienceScoreService:
     def calculate_sdnn_ow(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_dt: datetime,
         end_dt: datetime,
         deep_sleep_only: bool = False,
@@ -366,7 +365,7 @@ class ResilienceScoreService:
 
         Args:
             db_session: Active database session.
-            user_id: UUID of the user.
+            user_id: str of the user.
             start_dt: Start of the period (inclusive).
             end_dt: End of the period (exclusive).
             deep_sleep_only: When True, restrict HR data to deep-sleep windows only.
@@ -395,7 +394,7 @@ class ResilienceScoreService:
     def get_hrv_cv_scores_for_date_range(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         reference_dates: list[date],
     ) -> dict[date, HrvCvScoreResult]:
         """Calculate HRV-CV scores for multiple reference dates with a single DB fetch.

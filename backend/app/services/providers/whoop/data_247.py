@@ -55,7 +55,7 @@ class Whoop247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -89,7 +89,7 @@ class Whoop247Data(Base247DataTemplate):
     def _fetch_paginated(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         start_time: datetime,
         end_time: datetime,
@@ -164,7 +164,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -178,7 +178,7 @@ class Whoop247Data(Base247DataTemplate):
     def _normalize_sleep_health_score(
         self,
         normalized: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> HealthScoreCreate | None:
         """Build a HealthScoreCreate for Whoop sleep score."""
         if normalized.get("score_state") != "SCORED":
@@ -214,7 +214,7 @@ class Whoop247Data(Base247DataTemplate):
     def normalize_sleep(
         self,
         raw_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, Any], HealthScoreCreate | None]:  # ty:ignore[invalid-method-override]
         """Normalize Whoop sleep data to our schema."""
         # Extract basic fields
@@ -293,7 +293,7 @@ class Whoop247Data(Base247DataTemplate):
     def save_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
     ) -> None:
         """Save normalized sleep data to database as EventRecord with SleepDetails."""
@@ -383,7 +383,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_sleep_record(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         sleep_id: str,
     ) -> dict[str, Any]:
         """Fetch a single sleep record by its Whoop ID from /v2/activity/sleep/{id}."""
@@ -400,7 +400,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_single_sleep(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         sleep_id: str,
     ) -> tuple[int, str | None]:
         """Fetch a single sleep record by ID, normalize, and save to database.
@@ -432,7 +432,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_and_save_sleep(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> tuple[int, bool]:
@@ -465,7 +465,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,
@@ -567,7 +567,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_body_measurement(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Fetch body measurements from Whoop API.
 
@@ -598,7 +598,7 @@ class Whoop247Data(Base247DataTemplate):
     def _get_latest_value(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         series_type: SeriesType,
     ) -> Decimal | None:
         """Get the most recent value for a series type for this user/provider."""
@@ -619,7 +619,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_and_save_body_measurement(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> int:
         """Fetch body measurements and save height/weight to data_point_series.
 
@@ -703,7 +703,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -717,7 +717,7 @@ class Whoop247Data(Base247DataTemplate):
     def _normalize_recovery_health_score(
         self,
         normalized: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> HealthScoreCreate | None:
         """Build a HealthScoreCreate for Whoop recovery score."""
         recovery_score = normalized.get("recovery_score")
@@ -742,7 +742,7 @@ class Whoop247Data(Base247DataTemplate):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, Any], HealthScoreCreate | None]:  # ty:ignore[invalid-method-override]
         """Normalize Whoop recovery data to our schema.
 
@@ -791,7 +791,7 @@ class Whoop247Data(Base247DataTemplate):
     def save_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_recovery: dict[str, Any],
     ) -> int:
         """Save normalized recovery data to database as DataPointSeries.
@@ -847,7 +847,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_recovery_record(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         cycle_id: str,
     ) -> dict[str, Any]:
         """Fetch a single recovery record by cycle_id from /v2/cycle/{cycle_id}/recovery."""
@@ -864,7 +864,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_single_recovery(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         cycle_id: str,
     ) -> int:
         """Fetch a single recovery record by cycle_id, normalize, and save to database."""
@@ -892,7 +892,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_and_save_recovery(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> tuple[int, bool]:
@@ -935,7 +935,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_cycle_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -945,7 +945,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_cycle_record(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         cycle_id: str,
     ) -> dict[str, Any]:
         """Fetch a single cycle by its Whoop ID from /v2/cycle/{cycleId}."""
@@ -963,7 +963,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_single_cycle(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         cycle_id: str,
     ) -> int:
         """Fetch one cycle by ID, normalize, and save its energy sample and strain score.
@@ -1002,7 +1002,7 @@ class Whoop247Data(Base247DataTemplate):
     def normalize_cycle(
         self,
         raw_cycle: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[TimeSeriesSampleCreate | None, HealthScoreCreate | None]:
         """Normalize one cycle into a daily energy sample and a daily strain score.
 
@@ -1066,7 +1066,7 @@ class Whoop247Data(Base247DataTemplate):
     def load_and_save_cycles(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> tuple[int, bool]:
@@ -1112,7 +1112,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -1122,7 +1122,7 @@ class Whoop247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize activity samples into categorized data."""
         return {}
@@ -1134,7 +1134,7 @@ class Whoop247Data(Base247DataTemplate):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -1144,7 +1144,7 @@ class Whoop247Data(Base247DataTemplate):
     def normalize_daily_activity(
         self,
         raw_stats: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize daily activity statistics to our schema."""
         return {}

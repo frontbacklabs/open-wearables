@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Literal
-from uuid import UUID
 
 from celery import current_app as celery_app
 
@@ -183,7 +182,7 @@ class BaseProviderStrategy(ABC):
                 )
         """
 
-    def start_historical_sync(self, user_id: UUID, days: int) -> HistoricalSyncResult:
+    def start_historical_sync(self, user_id: str, days: int) -> HistoricalSyncResult:
         """Dispatch an async historical data sync.
 
         Default implementation works for pull-based providers. Override for

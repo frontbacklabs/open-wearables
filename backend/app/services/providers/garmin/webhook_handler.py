@@ -13,7 +13,7 @@ import contextlib
 import json
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from celery import current_app as celery_app
 from fastapi import HTTPException, Request
@@ -163,7 +163,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
         Raises on infrastructure errors so the task can retry.
         """
         errors: list[str] = []
-        synced_user_ids: set[UUID] = set()
+        synced_user_ids: set[str] = set()
         users_with_new_success: set[str] = set()
 
         # --- data processing ---------------------------------------------
@@ -202,7 +202,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
         db: DbSession,
         payload: dict[str, Any],
         errors: list[str],
-        synced_user_ids: set[UUID],
+        synced_user_ids: set[str],
         users_with_new_success: set[str],
         request_trace_id: str,
     ) -> dict[str, Any]:
@@ -223,7 +223,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
                     if status == "saved":
                         saved_count += len(result.get("record_ids", []))
                     if uid_str:
-                        synced_user_ids.add(UUID(uid_str))
+                        synced_user_ids.add(uid_str)
                         if mark_type_success(uid_str, "activities"):
                             users_with_new_success.add(uid_str)
                 elif status == "duplicate":
@@ -239,7 +239,7 @@ class GarminWebhookHandler(BaseWebhookHandler):
         db: DbSession,
         payload: dict[str, Any],
         errors: list[str],
-        synced_user_ids: set[UUID],
+        synced_user_ids: set[str],
         users_with_new_success: set[str],
         request_trace_id: str,
     ) -> dict[str, Any]:

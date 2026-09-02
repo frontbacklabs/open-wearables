@@ -2,7 +2,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from faker import Faker
 
@@ -88,7 +88,7 @@ def _generate_sleep_stages(
 
 
 def _generate_workout(
-    user_id: UUID,
+    user_id: str,
     fake: Faker,
     provider: ProviderName,
     last_synced_at: datetime,
@@ -182,7 +182,7 @@ def _generate_workout(
 
 
 def _generate_sleep(
-    user_id: UUID,
+    user_id: str,
     fake: Faker,
     provider: ProviderName,
     last_synced_at: datetime,
@@ -296,7 +296,7 @@ def _generate_sleep(
     return record, detail
 
 
-def _generate_personal_record(user_id: UUID, fake: Faker) -> PersonalRecordCreate:
+def _generate_personal_record(user_id: str, fake: Faker) -> PersonalRecordCreate:
     return PersonalRecordCreate(
         id=uuid4(),
         user_id=user_id,

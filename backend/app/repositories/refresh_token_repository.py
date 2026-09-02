@@ -26,7 +26,7 @@ class RefreshTokenRepository:
         stmt = select(self.model).where(self.model.id == token_id, self.model.revoked_at.is_(None))
         return db_session.execute(stmt).scalar_one_or_none()
 
-    def get_by_user_id(self, db_session: DbSession, user_id: UUID) -> list[RefreshToken]:
+    def get_by_user_id(self, db_session: DbSession, user_id: str) -> list[RefreshToken]:
         """Get all refresh tokens for a user."""
         stmt = select(self.model).where(self.model.user_id == user_id, self.model.revoked_at.is_(None))
         return list(db_session.execute(stmt).scalars().all())
@@ -43,7 +43,7 @@ class RefreshTokenRepository:
         db_session.refresh(token)
         return token
 
-    def revoke_all_for_user(self, db_session: DbSession, user_id: UUID) -> int:
+    def revoke_all_for_user(self, db_session: DbSession, user_id: str) -> int:
         """Revoke all refresh tokens for a user. Returns count of revoked tokens."""
         now = datetime.now(timezone.utc)
         stmt = (

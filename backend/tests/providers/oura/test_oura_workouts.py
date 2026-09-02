@@ -1,7 +1,5 @@
 """Tests for OuraWorkouts."""
 
-from uuid import uuid4
-
 import pytest
 
 from app.constants.workout_types.oura import get_unified_workout_type
@@ -9,6 +7,7 @@ from app.schemas.enums import WorkoutType
 from app.schemas.providers.oura import OuraWorkoutJSON
 from app.services.providers.oura.strategy import OuraStrategy
 from app.services.providers.oura.workouts import OuraWorkouts
+from tests.factories import fake_firebase_uid
 
 
 class TestOuraWorkoutTypeMapping:
@@ -67,7 +66,7 @@ class TestOuraWorkoutsNormalization:
     def test_normalize_workout_creates_records(
         self, workouts: OuraWorkouts, sample_oura_workout: OuraWorkoutJSON
     ) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record, detail = workouts._normalize_workout(sample_oura_workout, user_id)
 
         assert record.category == "workout"
@@ -79,7 +78,7 @@ class TestOuraWorkoutsNormalization:
         assert record.duration_seconds == 3600
 
     def test_normalize_workout_metrics(self, workouts: OuraWorkouts, sample_oura_workout: OuraWorkoutJSON) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record, detail = workouts._normalize_workout(sample_oura_workout, user_id)
 
         assert detail.energy_burned is not None
@@ -93,14 +92,14 @@ class TestOuraWorkoutsNormalization:
             start_datetime="2024-01-15T08:00:00+00:00",
             end_datetime="2024-01-15T08:30:00+00:00",
         )
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record, detail = workouts._normalize_workout(workout, user_id)
 
         assert record.type == WorkoutType.OTHER.value
         assert record.duration_seconds == 1800
 
     def test_build_bundles(self, workouts: OuraWorkouts, sample_oura_workout: OuraWorkoutJSON) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         bundles = list(workouts._build_bundles([sample_oura_workout], user_id))
         assert len(bundles) == 1
 

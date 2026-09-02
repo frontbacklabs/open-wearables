@@ -10,7 +10,6 @@ Tests cover:
 
 from datetime import datetime
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -20,6 +19,7 @@ from app.services.providers.garmin.strategy import GarminStrategy
 from app.services.providers.oura.strategy import OuraStrategy
 from app.services.providers.whoop.strategy import WhoopStrategy
 from app.utils.exceptions import UnsupportedProviderError
+from tests.factories import fake_firebase_uid
 
 
 class TestHistoricalSyncResult:
@@ -59,7 +59,7 @@ class TestPullBasedHistoricalSync:
     def test_oura_dispatches_pull_sync(self, mock_celery: MagicMock) -> None:
         """Pull-based provider should dispatch sync_vendor_data with is_historical=True."""
         mock_celery.send_task.return_value = MagicMock(id="task-oura-123")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         result = OuraStrategy().start_historical_sync(user_id, days=90)
 
@@ -79,7 +79,7 @@ class TestPullBasedHistoricalSync:
     def test_whoop_dispatches_pull_sync(self, mock_celery: MagicMock) -> None:
         """Another pull-based provider should also use the default implementation."""
         mock_celery.send_task.return_value = MagicMock(id="task-whoop-456")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         result = WhoopStrategy().start_historical_sync(user_id, days=30)
 
@@ -93,7 +93,7 @@ class TestPullBasedHistoricalSync:
     def test_respects_days_parameter(self, mock_celery: MagicMock) -> None:
         """The date range should span the requested number of days."""
         mock_celery.send_task.return_value = MagicMock(id="task-123")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         result = OuraStrategy().start_historical_sync(user_id, days=7)
 
@@ -110,7 +110,7 @@ class TestGarminHistoricalSync:
     def test_dispatches_backfill_task(self, mock_backfill: MagicMock) -> None:
         """Garmin should dispatch start_garmin_full_backfill, not sync_vendor_data."""
         mock_backfill.delay.return_value = MagicMock(id="task-garmin-789")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         result = GarminStrategy().start_historical_sync(user_id, days=90)
 
@@ -126,7 +126,7 @@ class TestGarminHistoricalSync:
     def test_ignores_days_parameter(self, mock_backfill: MagicMock) -> None:
         """Garmin always uses its own 30-day limit regardless of days param."""
         mock_backfill.delay.return_value = MagicMock(id="task-123")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         result = GarminStrategy().start_historical_sync(user_id, days=365)
 
@@ -139,7 +139,7 @@ class TestUnsupportedHistoricalSync:
 
     def test_apple_raises_unsupported(self) -> None:
         """SDK-only provider should raise UnsupportedProviderError."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         with pytest.raises(UnsupportedProviderError, match="apple"):
             AppleStrategy().start_historical_sync(user_id, days=90)

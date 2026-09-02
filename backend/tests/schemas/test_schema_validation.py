@@ -26,6 +26,7 @@ from app.schemas.model_crud.activities import (
 )
 from app.schemas.model_crud.credentials import OAuthTokenResponse
 from app.schemas.model_crud.user_management import UserConnectionCreate
+from tests.factories import fake_firebase_uid
 
 
 class TestEventRecordCreateValidation:
@@ -35,7 +36,7 @@ class TestEventRecordCreateValidation:
         """Should validate with all required fields."""
         # Arrange
         record_id = uuid4()
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         start_time = datetime(2024, 1, 15, 8, 0, 0, tzinfo=timezone.utc)
         end_time = datetime(2024, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
 
@@ -59,7 +60,7 @@ class TestEventRecordCreateValidation:
         """Should raise ValidationError when source_name is missing."""
         # Arrange
         record_id = uuid4()
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act & Assert
         with pytest.raises(ValidationError) as exc_info:
@@ -167,7 +168,7 @@ class TestUserConnectionCreateValidation:
     def test_valid_user_connection_create(self) -> None:
         """Should validate with all required fields."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         expires_at = datetime.now(timezone.utc)
 
         # Act
@@ -188,7 +189,7 @@ class TestUserConnectionCreateValidation:
     def test_missing_required_field_provider(self) -> None:
         """Should raise ValidationError when provider is missing."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act & Assert
         with pytest.raises(ValidationError) as exc_info:
@@ -203,7 +204,7 @@ class TestUserConnectionCreateValidation:
     def test_default_status_is_active(self) -> None:
         """Should set default status to ACTIVE."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         connection = UserConnectionCreate(

@@ -2,7 +2,7 @@ from collections.abc import Callable
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, TypeVar
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ValidationError
@@ -78,7 +78,7 @@ class Polar247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -136,7 +136,7 @@ class Polar247Data(Base247DataTemplate):
             prev_t = t
         return result
 
-    def _parse(self, raw: dict[str, Any], schema: type[_T], user_id: UUID, context: str) -> _T | None:
+    def _parse(self, raw: dict[str, Any], schema: type[_T], user_id: str, context: str) -> _T | None:
         try:
             return schema.model_validate(raw)
         except ValidationError as e:
@@ -149,7 +149,7 @@ class Polar247Data(Base247DataTemplate):
     # Sleep - GET /v3/users/sleep, GET /v3/users/sleep/{date} and GET /v3/users/sleep/available
     # -------------------------------------------------------------------------
 
-    def _get_available_sleep_dates(self, db: DbSession, user_id: UUID) -> set[date]:
+    def _get_available_sleep_dates(self, db: DbSession, user_id: str) -> set[date]:
         response = self._make_api_request(db, user_id, "/v3/users/sleep/available")
         nights = (response or {}).get("available", [])
         return {date.fromisoformat(night["date"]) for night in nights if night.get("date")}
@@ -157,7 +157,7 @@ class Polar247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -203,7 +203,7 @@ class Polar247Data(Base247DataTemplate):
         self,
         hr_samples: dict[str, int],
         sleep_start: datetime,
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         return [
             TimeSeriesSampleCreate(
@@ -225,7 +225,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_sleep(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[SleepNormalized]:  # ty:ignore[invalid-method-override]
         results: list[Polar247Data.SleepNormalized] = []
         for raw in raw_items:
@@ -312,7 +312,7 @@ class Polar247Data(Base247DataTemplate):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -336,7 +336,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_daily_activity(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:  # ty:ignore[invalid-method-override]
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -370,7 +370,7 @@ class Polar247Data(Base247DataTemplate):
     def get_continuous_hr_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -387,7 +387,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_continuous_hr(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -418,7 +418,7 @@ class Polar247Data(Base247DataTemplate):
     def get_cardio_load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -435,7 +435,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_cardio_load(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         scores: list[HealthScoreCreate] = []
         for raw in raw_items:
@@ -482,7 +482,7 @@ class Polar247Data(Base247DataTemplate):
     def get_nightly_recharge_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -492,7 +492,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_nightly_recharge(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         scores: list[HealthScoreCreate] = []
         for raw in raw_items:
@@ -536,7 +536,7 @@ class Polar247Data(Base247DataTemplate):
     def get_alertness_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -550,7 +550,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_alertness(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         scores: list[HealthScoreCreate] = []
         for raw in raw_items:
@@ -594,7 +594,7 @@ class Polar247Data(Base247DataTemplate):
     def get_circadian_bedtime_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -608,7 +608,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_circadian_bedtime(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         scores: list[HealthScoreCreate] = []
         for raw in raw_items:
@@ -645,7 +645,7 @@ class Polar247Data(Base247DataTemplate):
     def get_body_temperature_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -656,7 +656,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_body_temperature(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -690,7 +690,7 @@ class Polar247Data(Base247DataTemplate):
     def get_sleep_skin_temperature_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -701,7 +701,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_sleep_skin_temperature(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -743,7 +743,7 @@ class Polar247Data(Base247DataTemplate):
     def get_spo2_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -754,7 +754,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_spo2(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -796,7 +796,7 @@ class Polar247Data(Base247DataTemplate):
     def get_wrist_ecg_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -807,7 +807,7 @@ class Polar247Data(Base247DataTemplate):
     def normalize_wrist_ecg(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[TimeSeriesSampleCreate]:
         samples: list[TimeSeriesSampleCreate] = []
         for raw in raw_items:
@@ -860,7 +860,7 @@ class Polar247Data(Base247DataTemplate):
     def fetch_and_save_from_webhook(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         event_type: PolarWebhookEventType | str,
         path: str,
     ) -> dict[str, int]:
@@ -911,7 +911,7 @@ class Polar247Data(Base247DataTemplate):
     def _save_sleep(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> int:
@@ -947,7 +947,7 @@ class Polar247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,
@@ -1040,7 +1040,7 @@ class Polar247Data(Base247DataTemplate):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -1049,14 +1049,14 @@ class Polar247Data(Base247DataTemplate):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         return {}
 
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -1065,6 +1065,6 @@ class Polar247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         return {}

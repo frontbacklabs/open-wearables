@@ -132,7 +132,7 @@ def get_sdk_auth(
                 sub = payload.get("sub")
                 return SDKAuthContext(
                     auth_type="sdk_token",
-                    user_id=UUID(sub) if sub else None,
+                    user_id=sub,
                     app_id=payload.get("app_id"),
                 )
         except JWTError:

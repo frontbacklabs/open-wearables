@@ -26,7 +26,7 @@ class RefreshTokenService:
         """Generate an opaque refresh token ID with rt- prefix."""
         return f"rt-{secrets.token_hex(16)}"
 
-    def create_sdk_refresh_token(self, db_session: DbSession, user_id: UUID, app_id: str) -> str:
+    def create_sdk_refresh_token(self, db_session: DbSession, user_id: str, app_id: str) -> str:
         """Create a refresh token for an SDK token.
 
         Args:

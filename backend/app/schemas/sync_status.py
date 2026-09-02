@@ -60,7 +60,7 @@ class SyncStatusEvent(BaseModel):
 
     event_id: UUID = Field(default_factory=uuid4, description="Unique ID for this event.")
     run_id: str = Field(description="Identifier shared by all events of the same sync run.")
-    user_id: UUID
+    user_id: str
     provider: str = Field(description="Provider slug (e.g. 'garmin', 'apple', 'whoop').")
     source: SyncSource
     stage: SyncStage
@@ -70,7 +70,7 @@ class SyncStatusEvent(BaseModel):
     items_processed: int | None = Field(default=None, ge=0)
     items_total: int | None = Field(default=None, ge=0)
     error: str | None = None
-    primary_user_id: UUID | None = Field(
+    primary_user_id: str | None = Field(
         default=None,
         description="For LINKED_ACCOUNT events: the OW user whose sync run produced this data.",
     )
@@ -84,7 +84,7 @@ class SyncRunSummary(BaseModel):
     """Latest known status for a sync run, derived from the event stream."""
 
     run_id: str
-    user_id: UUID
+    user_id: str
     provider: str
     source: str
     stage: str
@@ -94,7 +94,7 @@ class SyncRunSummary(BaseModel):
     items_processed: int | None = None
     items_total: int | None = None
     error: str | None = None
-    primary_user_id: UUID | None = None
+    primary_user_id: str | None = None
     started_at: datetime | None = None
     ended_at: datetime | None = None
     last_update: datetime

@@ -9,7 +9,7 @@ from app.schemas.auth import ConnectionStatus, LiveSyncMode
 class UserConnectionBase(BaseModel):
     """Base schema for UserConnection."""
 
-    user_id: UUID
+    user_id: str
     provider: str
     provider_user_id: str | None = None
     provider_username: str | None = None

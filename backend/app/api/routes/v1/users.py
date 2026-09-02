@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Query, status
 
@@ -50,7 +49,7 @@ async def list_users(
         },
     },
 )
-def get_user(user_id: UUID, db: DbSession, _api_key: ApiKeyDep):
+def get_user(user_id: str, db: DbSession, _api_key: ApiKeyDep):
     return user_service.get(db, user_id, raise_404=True)
 
 
@@ -60,10 +59,10 @@ def create_user(payload: UserCreate, db: DbSession, _api_key: ApiKeyDep):
 
 
 @router.delete("/users/{user_id}", response_model=UserRead)
-def delete_user(user_id: UUID, db: DbSession, _developer: DeveloperDep):
+def delete_user(user_id: str, db: DbSession, _developer: DeveloperDep):
     return user_service.delete(db, user_id, raise_404=True)
 
 
 @router.patch("/users/{user_id}", response_model=UserRead)
-def update_user(user_id: UUID, payload: UserUpdate, db: DbSession, _developer: DeveloperDep):
+def update_user(user_id: str, payload: UserUpdate, db: DbSession, _developer: DeveloperDep):
     return user_service.update(db, user_id, payload, raise_404=True)

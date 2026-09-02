@@ -137,7 +137,7 @@ class SleepScoreService:
     def get_sleep_score_for_user(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         sleep_date: date,
     ) -> SleepScoreResult:
         """Fetch sleep data for a user on a given date and return their sleep score.
@@ -230,7 +230,7 @@ class SleepScoreService:
     def build_internal_sleep_scores(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         sessions: list[tuple[UUID, UUID, datetime]],
     ) -> list[HealthScoreCreate]:
         """Score sessions given as (record_id, data_source_id, local_end) and build the rows.
@@ -274,7 +274,7 @@ class SleepScoreService:
     def get_sleep_scores_for_records(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         record_wakes: list[tuple[UUID, date]],
     ) -> dict[tuple[UUID, date], SleepScoreResult]:
         """Calculate sleep scores for specific event records identified by ID.
@@ -386,7 +386,7 @@ class SleepScoreService:
     def get_sleep_scores_for_date_range(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         dates: list[date],
     ) -> dict[date, SleepScoreResult]:
         """Calculate sleep scores for multiple dates with a single DB query.

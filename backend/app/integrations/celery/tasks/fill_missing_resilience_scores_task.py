@@ -80,7 +80,7 @@ def fill_missing_resilience_scores() -> dict[str, int]:
         # Group reference dates per user
         dates_by_user: dict[UUID, list[date]] = defaultdict(list)
         for user_id, reference_date in rows:
-            dates_by_user[UUID(str(user_id))].append(reference_date)
+            dates_by_user[user_id].append(reference_date)
 
         log_structured(
             logger,

@@ -6,14 +6,13 @@ Tests Apple Health data import processing with user validation.
 
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.integrations.celery.tasks.process_sdk_upload_task import process_sdk_upload
-from tests.factories import UserFactory
+from tests.factories import UserFactory, fake_firebase_uid
 
 
 class TestProcessSDKUploadTask:
@@ -28,7 +27,7 @@ class TestProcessSDKUploadTask:
     ) -> None:
         """Verify task gracefully handles non-existent user_id."""
         # Arrange
-        non_existent_user_id = str(uuid4())
+        non_existent_user_id = fake_firebase_uid()
         mock_db = MagicMock()
         mock_session_local.return_value.__enter__ = MagicMock(return_value=mock_db)
         mock_session_local.return_value.__exit__ = MagicMock(return_value=None)
@@ -49,17 +48,27 @@ class TestProcessSDKUploadTask:
         assert result["status"] == "skipped"
         assert result["reason"] == "user_not_found"
 
-    def test_process_sdk_upload_with_invalid_uuid(self) -> None:
-        """Verify task handles invalid UUID format gracefully."""
+    @patch("app.integrations.celery.tasks.process_sdk_upload_task.SessionLocal")
+    @patch("app.integrations.celery.tasks.process_sdk_upload_task.UserRepository")
+    def test_process_sdk_upload_with_unknown_user(
+        self,
+        mock_user_repo_class: MagicMock,
+        mock_session_local: MagicMock,
+    ) -> None:
+        """User ids are free-form text, so an unknown one is rejected by the lookup."""
+        mock_user_repo = MagicMock()
+        mock_user_repo.get.return_value = None
+        mock_user_repo_class.return_value = mock_user_repo
+
         result = process_sdk_upload(
             content='{"data":{"workouts":[],"records":[]}}',
             content_type="application/json",
-            user_id="not-a-valid-uuid",
+            user_id=fake_firebase_uid(),
             provider="apple",
         )
 
-        assert result["status"] == "error"
-        assert result["reason"] == "invalid_user_id"
+        assert result["status"] == "skipped"
+        assert result["reason"] == "user_not_found"
 
     @patch("app.integrations.celery.tasks.process_sdk_upload_task.sdk_import_service")
     @patch("app.integrations.celery.tasks.process_sdk_upload_task.SessionLocal")
@@ -103,14 +112,14 @@ class TestProcessSDKUploadTask:
 
     @patch("app.integrations.celery.tasks.process_sdk_upload_task.SessionLocal")
     @patch("app.integrations.celery.tasks.process_sdk_upload_task.UserRepository")
-    def test_process_sdk_upload_user_check_uses_correct_uuid(
+    def test_process_sdk_upload_user_check_uses_supplied_id(
         self,
         mock_user_repo_class: MagicMock,
         mock_session_local: MagicMock,
     ) -> None:
-        """Verify the user repository is called with the correct UUID."""
+        """Verify the user repository is looked up by the id exactly as supplied."""
         # Arrange
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         mock_db = MagicMock()
         mock_session_local.return_value.__enter__ = MagicMock(return_value=mock_db)
         mock_session_local.return_value.__exit__ = MagicMock(return_value=None)
@@ -128,12 +137,10 @@ class TestProcessSDKUploadTask:
         )
 
         # Assert
-        from uuid import UUID
-
         mock_user_repo.get.assert_called_once()
         call_args = mock_user_repo.get.call_args
         assert call_args[0][0] == mock_db
-        assert call_args[0][1] == UUID(user_id)
+        assert call_args[0][1] == user_id
 
 
 _MODULE = "app.integrations.celery.tasks.process_sdk_upload_task"
@@ -162,7 +169,7 @@ class TestOffloadedPayload:
         result = process_sdk_upload(
             content=None,
             content_type="application/json",
-            user_id=str(uuid4()),
+            user_id=fake_firebase_uid(),
             provider="apple",
             payload_ref=_PAYLOAD_REF,
         )
@@ -179,7 +186,7 @@ class TestOffloadedPayload:
             process_sdk_upload(
                 content=None,
                 content_type="application/json",
-                user_id=str(uuid4()),
+                user_id=fake_firebase_uid(),
                 provider="apple",
                 payload_ref=_PAYLOAD_REF,
             )
@@ -188,7 +195,7 @@ class TestOffloadedPayload:
         result = process_sdk_upload(
             content=None,
             content_type="application/json",
-            user_id=str(uuid4()),
+            user_id=fake_firebase_uid(),
             provider="apple",
         )
 

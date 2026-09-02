@@ -53,7 +53,7 @@ _SVIX_ORG_ID = "org_openwearables"
 _USER_CHANNEL_PREFIX = "user."
 
 
-def _user_channels(user_id: UUID | None) -> list[str] | None:
+def _user_channels(user_id: str | None) -> list[str] | None:
     if user_id is None:
         return None
     return [f"{_USER_CHANNEL_PREFIX}{user_id}"]
@@ -237,7 +237,7 @@ def create_endpoint(
     description: str | None = None,
     filter_types: list[str] | None = None,
     *,
-    user_id: UUID | None = None,
+    user_id: str | None = None,
 ) -> EndpointOut:
     # Build via model_validate so that fields absent from the dict are NOT set
     # in model_fields_set.  EndpointIn uses exclude_unset=True serialisation;
@@ -277,7 +277,7 @@ def patch_endpoint(
     url: str | None = None,
     description: str | None = None,
     filter_types: list[str] | None = None,
-    user_id: UUID | None = None,
+    user_id: str | None = None,
     clear_user_id: bool = False,
 ) -> EndpointOut:
     """Patch an endpoint.

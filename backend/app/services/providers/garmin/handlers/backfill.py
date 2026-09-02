@@ -8,7 +8,6 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
 
 from fastapi import HTTPException
 
@@ -60,7 +59,7 @@ class GarminBackfillService:
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
     ) -> Any:
@@ -85,7 +84,7 @@ class GarminBackfillService:
     def trigger_backfill(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         data_types: list[str] | None = None,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
@@ -234,7 +233,7 @@ class GarminBackfillService:
     def trigger_sleep_backfill(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> bool:
@@ -245,7 +244,7 @@ class GarminBackfillService:
     def trigger_dailies_backfill(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> bool:
@@ -256,7 +255,7 @@ class GarminBackfillService:
     def trigger_epochs_backfill(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> bool:
@@ -267,7 +266,7 @@ class GarminBackfillService:
     def trigger_activities_backfill(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | None = None,
         end_time: datetime | None = None,
     ) -> bool:

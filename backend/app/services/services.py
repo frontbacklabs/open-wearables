@@ -3,6 +3,8 @@ from uuid import UUID
 
 from fastapi import Request
 from pydantic import BaseModel
+from sqlalchemy import UUID as SQL_UUID
+from sqlalchemy import inspect
 
 from app.database import BaseDbModel, DbSession
 from app.repositories.repositories import CrudRepository
@@ -32,6 +34,23 @@ class AppService[
         self.logger = log
         super().__init__(**kwargs)
 
+    def _coerce_id(self, object_id: UUID | str | int) -> UUID | str | int:
+        """Parse a string id into a UUID only when the model's key is actually a UUID.
+
+        Keyed off the column type rather than whether the string happens to parse: user
+        ids are Firebase UIDs in a text column, and one that looked UUID-shaped would
+        otherwise be sent to Postgres as a uuid and fail against varchar.
+        """
+        if not isinstance(object_id, str):
+            return object_id
+        pk = inspect(self.crud.model).primary_key[0]
+        if not isinstance(pk.type, SQL_UUID):
+            return object_id
+        try:
+            return UUID(object_id)
+        except ValueError:
+            return object_id
+
     def create(self, db_session: DbSession, creator: CreateSchemaType) -> ModelType:
         creation = self.crud.create(db_session, creator)
         self.logger.debug(f"Created {self.name} with ID: {creation.id}.")  # ty:ignore[unresolved-attribute]
@@ -45,14 +64,7 @@ class AppService[
         raise_404: bool = False,
         print_log: bool = True,
     ) -> ModelType | None:
-        # For str IDs, try to convert to UUID if it looks like one, otherwise pass as-is
-        if isinstance(object_id, str):
-            try:
-                id_to_fetch: UUID | int | str = UUID(object_id)
-            except ValueError:
-                id_to_fetch = object_id
-        else:
-            id_to_fetch = object_id
+        id_to_fetch: UUID | str | int = self._coerce_id(object_id)
 
         if not (fetched := self.crud.get(db_session, id_to_fetch)) and raise_404:
             raise ResourceNotFoundError(self.name, id_to_fetch)  # ty:ignore[invalid-argument-type]

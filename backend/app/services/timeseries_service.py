@@ -143,7 +143,7 @@ class TimeSeriesService(
     def get_timeseries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         types: list[SeriesType],
         params: TimeSeriesQueryParams,
     ) -> PaginatedResponse[TimeSeriesSample]:

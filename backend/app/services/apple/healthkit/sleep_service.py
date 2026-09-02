@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from logging import getLogger
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.config import settings
 from app.constants.series_types.sdk import (
@@ -450,7 +450,7 @@ def finish_sleep(db_session: DbSession, user_id: str, state: SleepState) -> None
     source_for_lookup = state.source_name if state.source_name != "unknown" else None
     adjacent = event_record_service.find_adjacent_sleep_record(
         db_session,
-        UUID(user_id),
+        user_id,
         start_time,
         end_time,
         settings.sleep_end_gap_minutes,
@@ -494,7 +494,7 @@ def finish_sleep(db_session: DbSession, user_id: str, state: SleepState) -> None
     sleep_record = EventRecordCreate(
         id=uuid4(),
         external_id=state.uuid,
-        user_id=UUID(user_id),
+        user_id=user_id,
         start_datetime=start_time,
         end_datetime=end_time,
         zone_offset=state.zone_offset,

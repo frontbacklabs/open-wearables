@@ -341,15 +341,15 @@ class TestSyncVendorDataTask:
         assert result["errors"] == {}
         assert result["message"] == "No active provider connections found"
 
-    def test_sync_vendor_data_invalid_user_id(self, mock_celery_app: MagicMock) -> None:
-        """Test handling of invalid user ID format."""
+    def test_sync_vendor_data_empty_user_id(self, mock_celery_app: MagicMock) -> None:
+        """Ids are free-form text, so emptiness is the only shape left to reject."""
         # Act
-        result = sync_vendor_data("not-a-valid-uuid")
+        result = sync_vendor_data("")
 
         # Assert
-        assert result["user_id"] == "not-a-valid-uuid"
+        assert result["user_id"] == ""
         assert "user_id" in result["errors"]
-        assert "Invalid UUID format" in result["errors"]["user_id"]
+        assert "must not be empty" in result["errors"]["user_id"]
 
 
 class TestBuildSyncParams:

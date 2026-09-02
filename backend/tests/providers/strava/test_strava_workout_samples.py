@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -17,6 +16,7 @@ from app.schemas.model_crud.activities import TimeSeriesSampleCreate
 from app.schemas.providers.strava import ActivityJSON as StravaActivityJSON
 from app.services.providers.strava.oauth import StravaOAuth
 from app.services.providers.strava.workouts import StravaWorkouts
+from tests.factories import fake_firebase_uid
 
 _START_DT = datetime(2024, 1, 15, 8, 0, 0, tzinfo=timezone.utc)
 _ZONE_OFFSET = "+01:00"
@@ -69,7 +69,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """Happy path: streams with time+heartrate+velocity_smooth → correct samples."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with patch.object(strava_workouts, "_make_api_request", return_value=_STRAVA_STREAMS_3S):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
 
@@ -86,7 +86,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """recorded_at = start_dt + time[i] seconds for each sample."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with patch.object(strava_workouts, "_make_api_request", return_value=_STRAVA_STREAMS_3S):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
 
@@ -103,7 +103,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """Correct series_type, value, source, zone_offset on each sample."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with patch.object(strava_workouts, "_make_api_request", return_value=_STRAVA_STREAMS_3S):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
 
@@ -134,7 +134,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """Streams dict without 'time' key → empty list."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         streams_no_time = {"heartrate": {"data": [120, 130]}}
         with patch.object(strava_workouts, "_make_api_request", return_value=streams_no_time):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
@@ -147,7 +147,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """Empty 'time' data array → empty list."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         streams_empty_time: dict[str, Any] = {"time": {"data": []}, "heartrate": {"data": []}}
         with patch.object(strava_workouts, "_make_api_request", return_value=streams_empty_time):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
@@ -160,7 +160,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """Non-dict API response (e.g. list, None) → empty list, no crash."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with patch.object(strava_workouts, "_make_api_request", return_value=[]):
             samples = strava_workouts._build_workout_samples(db, user_id, 98765, _START_DT, _ZONE_OFFSET, _DEVICE_MODEL)
         assert samples == []
@@ -171,7 +171,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """metric data shorter than time → only valid indices emitted."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         streams: dict[str, Any] = {
             "time": {"data": [0, 1, 2]},
             "heartrate": {"data": [120]},
@@ -188,7 +188,7 @@ class TestBuildWorkoutSamples:
         db: Session,
     ) -> None:
         """distance stream is intentionally excluded (no generic SeriesType.distance)."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         streams: dict[str, Any] = {
             "time": {"data": [0, 1]},
             "distance": {"data": [0.0, 10.0]},
@@ -210,7 +210,7 @@ class TestFlagGuard:
         db: Session,
     ) -> None:
         """When ingest_workout_samples is False, _make_api_request must NOT be called."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with (
             patch(
                 "app.services.providers.strava.workouts.settings",
@@ -229,7 +229,7 @@ class TestFlagGuard:
         db: Session,
     ) -> None:
         """When ingest_workout_samples is False, bulk_create_samples must NOT be called."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         with (
             patch(
                 "app.services.providers.strava.workouts.settings",
@@ -252,7 +252,7 @@ class TestIngestionWiring:
         db: Session,
     ) -> None:
         """Flag ON: bulk_create_samples called with the built samples."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record_mock = MagicMock()
         record_mock.start_datetime = _START_DT
         record_mock.zone_offset = _ZONE_OFFSET
@@ -280,7 +280,7 @@ class TestIngestionWiring:
         db: Session,
     ) -> None:
         """Persistence raising is swallowed; workout ingestion continues, 0 saved."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record_mock = MagicMock()
         record_mock.start_datetime = _START_DT
         record_mock.zone_offset = _ZONE_OFFSET
@@ -304,7 +304,7 @@ class TestIngestionWiring:
         db: Session,
     ) -> None:
         """Fetch raising an exception is swallowed; workout ingestion continues, 0 saved."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record_mock = MagicMock()
         record_mock.start_datetime = _START_DT
         record_mock.zone_offset = _ZONE_OFFSET
@@ -332,7 +332,7 @@ class TestIngestionWiring:
         db: Session,
     ) -> None:
         """Empty sample list (no time stream) → bulk_create_samples never called."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record_mock = MagicMock()
         record_mock.start_datetime = _START_DT
         record_mock.zone_offset = _ZONE_OFFSET

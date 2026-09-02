@@ -3,7 +3,6 @@
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from logging import Logger, getLogger
-from uuid import UUID
 
 from app.database import DbSession
 from app.models import DataPointSeries, EventRecord, HealthScore, ProviderPriority, User
@@ -100,7 +99,7 @@ class SummariesService:
     def _filter_by_priority(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         results: list[dict] | list,
         date_key: str = "activity_date",
     ) -> list[dict] | list:
@@ -156,7 +155,7 @@ class SummariesService:
 
         return filtered
 
-    def _get_user_max_hr(self, db_session: DbSession, user_id: UUID, reference_date: datetime) -> int:
+    def _get_user_max_hr(self, db_session: DbSession, user_id: str, reference_date: datetime) -> int:
         """Calculate user's max HR based on age.
 
         Uses formula: max_hr = 220 - age
@@ -191,7 +190,7 @@ class SummariesService:
     def _merge_archive_activity(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         live_results: list,  # noqa: ANN401  — accepts ActivityAggregateResult | dict
@@ -247,7 +246,7 @@ class SummariesService:
     def get_sleep_summaries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         cursor: str | None,
@@ -380,7 +379,7 @@ class SummariesService:
     def get_recovery_summaries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         cursor: str | None,
@@ -452,7 +451,7 @@ class SummariesService:
     def get_activity_summaries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         cursor: str | None,
@@ -718,7 +717,7 @@ class SummariesService:
     def get_body_summary(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         average_period_days: int = DEFAULT_AVERAGE_PERIOD_DAYS,
         latest_window_hours: int = DEFAULT_LATEST_WINDOW_HOURS,
     ) -> BodySummary | None:

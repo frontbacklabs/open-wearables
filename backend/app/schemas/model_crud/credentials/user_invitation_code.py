@@ -11,7 +11,7 @@ class UserInvitationCodeCreate(BaseModel):
 
     id: UUID
     code: str
-    user_id: UUID
+    user_id: str
     created_by_id: UUID
     expires_at: datetime
     redeemed_at: None = None
@@ -26,7 +26,7 @@ class UserInvitationCodeRead(BaseModel):
 
     id: UUID
     code: str
-    user_id: UUID
+    user_id: str
     expires_at: datetime
     created_at: datetime
 
@@ -40,4 +40,4 @@ class UserInvitationCodeRedeem(BaseModel):
 class InvitationCodeRedeemResponse(TokenResponse):
     """Redeem response with user_id included."""
 
-    user_id: UUID
+    user_id: str

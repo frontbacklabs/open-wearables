@@ -1,7 +1,6 @@
 from collections import defaultdict
 from datetime import datetime
 from logging import Logger, getLogger
-from uuid import UUID
 
 from app.database import DbSession
 from app.schemas.responses.dashboard import ProviderDataCount, UserDataSummaryResponse
@@ -64,7 +63,7 @@ class SystemInfoService:
     def get_user_data_summary(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
     ) -> UserDataSummaryResponse:

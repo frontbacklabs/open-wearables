@@ -85,7 +85,7 @@ class Suunto247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -116,7 +116,7 @@ class Suunto247Data(Base247DataTemplate):
     def _fetch_in_chunks(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         start_time: datetime,
         end_time: datetime,
@@ -158,7 +158,7 @@ class Suunto247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -168,7 +168,7 @@ class Suunto247Data(Base247DataTemplate):
     def normalize_sleep(
         self,
         raw_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize a single Suunto sleep entry to our internal dict format."""
         entry_data: dict[str, Any] = raw_sleep.get("entryData", {})
@@ -210,7 +210,7 @@ class Suunto247Data(Base247DataTemplate):
     def save_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
     ) -> bool:
         """Save normalized sleep data as EventRecord + SleepDetails.
@@ -290,7 +290,7 @@ class Suunto247Data(Base247DataTemplate):
     def _persist_resting_heart_rate(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
         recorded_at: datetime,
     ) -> None:
@@ -335,7 +335,7 @@ class Suunto247Data(Base247DataTemplate):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -345,7 +345,7 @@ class Suunto247Data(Base247DataTemplate):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize Suunto recovery data to our schema.
 
@@ -373,7 +373,7 @@ class Suunto247Data(Base247DataTemplate):
     def save_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_recovery: dict[str, Any],
     ) -> int:
         """Save normalized recovery data as a HealthScore record.
@@ -421,7 +421,7 @@ class Suunto247Data(Base247DataTemplate):
     def load_and_save_recovery(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> int:
@@ -456,7 +456,7 @@ class Suunto247Data(Base247DataTemplate):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -466,7 +466,7 @@ class Suunto247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize Suunto activity samples into categorized lists."""
         categorized: dict[str, list[dict[str, Any]]] = {
@@ -514,7 +514,7 @@ class Suunto247Data(Base247DataTemplate):
     def save_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_samples: dict[str, list[dict[str, Any]]],
     ) -> int:
         """Save normalized activity samples to database using bulk_create for efficiency."""
@@ -567,7 +567,7 @@ class Suunto247Data(Base247DataTemplate):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -608,7 +608,7 @@ class Suunto247Data(Base247DataTemplate):
     def normalize_daily_activity(
         self,
         raw_stats: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize Suunto daily activity statistics.
 
@@ -630,7 +630,7 @@ class Suunto247Data(Base247DataTemplate):
     def save_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_stats: list[dict[str, Any]],
     ) -> int:
         """Save daily activity statistics as DataPointSeries (bulk)."""
@@ -681,7 +681,7 @@ class Suunto247Data(Base247DataTemplate):
     def load_and_save_sleep(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> tuple[int, int]:
@@ -715,7 +715,7 @@ class Suunto247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,

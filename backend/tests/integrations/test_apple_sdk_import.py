@@ -9,7 +9,6 @@ import logging
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -18,7 +17,7 @@ from app.models import EventRecord, WorkoutDetails
 from app.schemas.enums import SeriesType
 from app.schemas.providers.mobile_sdk import SyncRequest as SDKSyncRequest
 from app.services.apple.healthkit.import_service import ImportService
-from tests.factories import UserFactory
+from tests.factories import UserFactory, fake_firebase_uid
 
 SDK_ENVELOPE: dict[str, str] = {
     "provider": "apple",
@@ -602,7 +601,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """Apple sends ratio 0.304 — must be stored as 30.4 (%)."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "apple",
             [self._record("HKQuantityTypeIdentifierBodyFatPercentage", 0.304)],
@@ -618,7 +617,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """Google/Health Connect sends already-percent 30.4 — must be stored as 30.4 (no x100)."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "google",
             [self._record("BODY_FAT", 30.4)],
@@ -634,7 +633,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """Samsung uses Health Connect semantics — already percent, must not be scaled."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "samsung",
             [self._record("BODY_FAT", 18.5)],
@@ -650,7 +649,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """Height in meters 1.7526 — must be stored as 175.26 cm regardless of provider."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "apple",
             [self._record("HKQuantityTypeIdentifierHeight", 1.7526)],
@@ -666,7 +665,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """Health Connect also sends height in meters — the x100 conversion still applies."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "google",
             [self._record("HEIGHT", 1.7526)],
@@ -693,7 +692,7 @@ class TestSDKImportUnitConversion:
         expected: Decimal,
     ) -> None:
         """Health Connect glucose arrives in mmol/L and must be stored as mg/dL; only a mmol unit converts."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "samsung",
             [self._record("BLOOD_GLUCOSE", 6.111, unit=unit)],
@@ -709,7 +708,7 @@ class TestSDKImportUnitConversion:
         import_service: ImportService,
     ) -> None:
         """HealthKit reports glucose in mg/dL - stored unchanged."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         request = self._build_request(
             "apple",
             [self._record("HKQuantityTypeIdentifierBloodGlucose", 105, unit="mg/dL")],

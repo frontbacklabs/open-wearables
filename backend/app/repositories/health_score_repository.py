@@ -1,6 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, cast
-from uuid import UUID
 
 from sqlalchemy import and_, asc, desc, tuple_
 from sqlalchemy.dialects.postgresql import insert
@@ -25,7 +24,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
     def get_with_filters(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         params: HealthScoreQueryParams,
     ) -> tuple[list[HealthScore], int]:
         filters = [HealthScore.user_id == user_id]
@@ -61,7 +60,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
     def get_latest_by_category(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         category: HealthScoreCategory,
     ) -> HealthScore | None:
         """Return the most recent health score for a given category and user."""
@@ -75,7 +74,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
     def delete_for_user_date(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         score_date: date,
         category: HealthScoreCategory,
         provider: str = "internal",
@@ -102,7 +101,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
     def get_recovery_summaries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         cursor: str | None,
@@ -163,7 +162,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
     def get_latest_per_category(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScore]:
         """Return the most recent score for each category for a given user.
 

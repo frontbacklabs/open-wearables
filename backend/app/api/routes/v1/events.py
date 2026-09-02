@@ -20,7 +20,7 @@ router = APIRouter()
 
 @router.get("/users/{user_id}/events/workouts")
 def list_workouts(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -42,7 +42,7 @@ def list_workouts(
 
 @router.get("/users/{user_id}/events/sleep")
 def list_sleep_sessions(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -69,7 +69,7 @@ def list_sleep_sessions(
 
 @router.get("/users/{user_id}/events/menstrual-cycles")
 def list_menstrual_cycles(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -89,7 +89,7 @@ def list_menstrual_cycles(
 
 @router.delete("/users/{user_id}/events/workouts/{workout_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_workout(
-    user_id: UUID,
+    user_id: str,
     workout_id: UUID,
     db: DbSession,
     _api_key: ApiKeyDep,
@@ -101,7 +101,7 @@ def delete_workout(
 
 @router.delete("/users/{user_id}/events/sleep/{sleep_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_sleep_session(
-    user_id: UUID,
+    user_id: str,
     sleep_id: UUID,
     db: DbSession,
     _api_key: ApiKeyDep,
@@ -113,7 +113,7 @@ def delete_sleep_session(
 
 @router.delete("/users/{user_id}/events/menstrual-cycles/{cycle_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_menstrual_cycle(
-    user_id: UUID,
+    user_id: str,
     cycle_id: UUID,
     db: DbSession,
     _api_key: ApiKeyDep,

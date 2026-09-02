@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Query
 
@@ -17,7 +16,7 @@ router = APIRouter()
 
 @router.get("/users/{user_id}/health-scores")
 def list_health_scores(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     start_date: DateTimeQueryParam | None = None,

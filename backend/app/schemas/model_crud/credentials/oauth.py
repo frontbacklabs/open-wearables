@@ -1,5 +1,4 @@
 from datetime import datetime, timezone
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -8,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class OAuthState(BaseModel):
     """OAuth state stored in Redis during authorization flow."""
 
-    user_id: UUID
+    user_id: str
     provider: str
     redirect_uri: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

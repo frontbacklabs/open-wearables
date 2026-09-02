@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, TypeVar
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from pydantic import BaseModel, ValidationError
 
@@ -49,7 +49,7 @@ class SensorBio247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -83,7 +83,7 @@ class SensorBio247Data(Base247DataTemplate):
         )
         return result
 
-    def _parse(self, raw: dict[str, Any], schema: type[_SchemaT], context: str, user_id: UUID) -> _SchemaT | None:
+    def _parse(self, raw: dict[str, Any], schema: type[_SchemaT], context: str, user_id: str) -> _SchemaT | None:
         """Validate a raw API dict through a Pydantic schema.
 
         On ValidationError, log + return None (mirrors polar/data_247.py ~138-145).
@@ -115,7 +115,7 @@ class SensorBio247Data(Base247DataTemplate):
     # -------------------------------------------------------------------------
 
     def get_sleep_data(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
+        self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime
     ) -> list[dict[str, Any]]:
         """Fetch sleep sessions for each local calendar day in the window.
 
@@ -146,7 +146,7 @@ class SensorBio247Data(Base247DataTemplate):
 
         return all_sleep_data
 
-    def normalize_sleep(self, raw_sleep: dict[str, Any], user_id: UUID) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
+    def normalize_sleep(self, raw_sleep: dict[str, Any], user_id: str) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
         """Validate + normalise a single /v1/sleep record.
 
         Returns None if the record fails Pydantic validation so the caller can skip it.
@@ -194,7 +194,7 @@ class SensorBio247Data(Base247DataTemplate):
             "raw": raw_sleep,
         }
 
-    def save_sleep_data(self, db: DbSession, user_id: UUID, normalized_sleep: dict[str, Any]) -> bool:
+    def save_sleep_data(self, db: DbSession, user_id: str, normalized_sleep: dict[str, Any]) -> bool:
         """Persist a normalized sleep record. Returns True on success, False when skipped or on error."""
         sleep_id = normalized_sleep["id"]
         start_dt = normalized_sleep.get("start_time")
@@ -259,7 +259,7 @@ class SensorBio247Data(Base247DataTemplate):
             )
             return False
 
-    def load_and_save_sleep(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> int:
+    def load_and_save_sleep(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> int:
         raw_data = self.get_sleep_data(db, user_id, start_time, end_time)
         count = 0
         for item in raw_data:
@@ -284,7 +284,7 @@ class SensorBio247Data(Base247DataTemplate):
     # -------------------------------------------------------------------------
 
     def get_recovery_data(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
+        self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime
     ) -> list[dict[str, Any]]:
         """Fetch daily scores for each local calendar day in the window.
 
@@ -315,7 +315,7 @@ class SensorBio247Data(Base247DataTemplate):
 
         return all_scores
 
-    def normalize_recovery(self, raw_recovery: dict[str, Any], user_id: UUID) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
+    def normalize_recovery(self, raw_recovery: dict[str, Any], user_id: str) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
         """Validate + normalise a /v1/scores record (recovery + activity + sleep scores).
 
         Returns None on validation failure so the caller can skip cleanly.
@@ -350,7 +350,7 @@ class SensorBio247Data(Base247DataTemplate):
             "raw": raw_recovery,
         }
 
-    def save_recovery_data(self, db: DbSession, user_id: UUID, normalized_recovery: dict[str, Any]) -> dict[str, int]:
+    def save_recovery_data(self, db: DbSession, user_id: str, normalized_recovery: dict[str, Any]) -> dict[str, int]:
         """Persist normalized recovery data: biometric timeseries + health scores.
 
         Returns ``{\"metrics_synced\": N, \"scores_synced\": M}`` so callers can
@@ -447,7 +447,7 @@ class SensorBio247Data(Base247DataTemplate):
         return {"metrics_synced": metrics_synced, "scores_synced": scores_synced}
 
     def load_and_save_recovery(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
+        self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime
     ) -> dict[str, int]:
         raw_data = self.get_recovery_data(db, user_id, start_time, end_time)
         totals = {"metrics_synced": 0, "scores_synced": 0}
@@ -484,7 +484,7 @@ class SensorBio247Data(Base247DataTemplate):
     # -------------------------------------------------------------------------
 
     def get_activity_samples(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
+        self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime
     ) -> list[dict[str, Any]]:
         all_samples: list[dict[str, Any]] = []
         last_timestamp = 0
@@ -528,7 +528,7 @@ class SensorBio247Data(Base247DataTemplate):
         return all_samples
 
     def normalize_activity_samples(
-        self, raw_samples: list[dict[str, Any]], user_id: UUID
+        self, raw_samples: list[dict[str, Any]], user_id: str
     ) -> dict[str, list[dict[str, Any]]]:
         normalized: dict[str, list[dict[str, Any]]] = {key: [] for key in ACTIVITY_SAMPLE_SERIES}
         field_map = {
@@ -551,7 +551,7 @@ class SensorBio247Data(Base247DataTemplate):
         return normalized
 
     def save_activity_samples(
-        self, db: DbSession, user_id: UUID, normalized_samples: dict[str, list[dict[str, Any]]]
+        self, db: DbSession, user_id: str, normalized_samples: dict[str, list[dict[str, Any]]]
     ) -> int:
         """Persist normalized biometric activity samples as timeseries entries."""
         all_samples: list[TimeSeriesSampleCreate] = []
@@ -593,7 +593,7 @@ class SensorBio247Data(Base247DataTemplate):
     # -------------------------------------------------------------------------
 
     def get_daily_activity_statistics(
-        self, db: DbSession, user_id: UUID, start_date: datetime, end_date: datetime
+        self, db: DbSession, user_id: str, start_date: datetime, end_date: datetime
     ) -> list[dict[str, Any]]:
         """Fetch step details per day from /v1/step/details.
 
@@ -620,7 +620,7 @@ class SensorBio247Data(Base247DataTemplate):
             current_date += timedelta(days=1)
         return all_stats
 
-    def normalize_daily_activity(self, raw_stats: dict[str, Any], user_id: UUID) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
+    def normalize_daily_activity(self, raw_stats: dict[str, Any], user_id: str) -> dict[str, Any] | None:  # ty:ignore[invalid-method-override]
         """Validate + normalise a StepDetailsResponseBody into our internal shape."""
         parsed = self._parse(raw_stats, StepDetailsResponse, "step_details", user_id)
         if parsed is None:
@@ -649,7 +649,7 @@ class SensorBio247Data(Base247DataTemplate):
             "raw": raw_stats,
         }
 
-    def save_daily_activity(self, db: DbSession, user_id: UUID, normalized_activity: dict[str, Any]) -> int:
+    def save_daily_activity(self, db: DbSession, user_id: str, normalized_activity: dict[str, Any]) -> int:
         """Persist steps/energy/distance_walking_running as daily-total timeseries."""
         timestamp = normalized_activity.get("timestamp")
         if not timestamp:
@@ -688,7 +688,7 @@ class SensorBio247Data(Base247DataTemplate):
         return len(samples)
 
     def load_and_save_daily_activity(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
+        self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime
     ) -> int:
         """Fetch, normalize, and persist daily step/distance/energy data."""
         raw_data = self.get_daily_activity_statistics(db, user_id, start_time, end_time)
@@ -716,7 +716,7 @@ class SensorBio247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,

@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
@@ -15,7 +14,7 @@ factory = ProviderFactory()
 @router.get("/{provider}/users/{user_id}/workouts")
 def get_user_workouts(
     provider: Annotated[ProviderName, Path(description="Workout data provider")],
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     # Suunto-specific parameters
@@ -82,7 +81,7 @@ def get_user_workouts(
 @router.get("/{provider}/users/{user_id}/workouts/{workout_id}")
 def get_user_workout_detail(
     provider: Annotated[ProviderName, Path(description="Workout data provider")],
-    user_id: UUID,
+    user_id: str,
     workout_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,

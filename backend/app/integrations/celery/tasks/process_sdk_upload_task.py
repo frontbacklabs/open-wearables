@@ -1,7 +1,6 @@
 import uuid
 from logging import getLogger
 from typing import Any
-from uuid import UUID
 
 from celery import shared_task
 
@@ -90,25 +89,10 @@ def process_sdk_upload(
         )
         return {"status": "error", "reason": "missing_payload", "batch_id": batch_id}
 
-    # Validate user_id format
-    try:
-        user_uuid = UUID(user_id)
-    except ValueError:
-        log_structured(
-            logger,
-            "warning",
-            "Invalid user_id format",
-            provider=provider,
-            action="validate_user_id",
-            batch_id=batch_id,
-            user_id=user_id,
-        )
-        return {"status": "error", "reason": "invalid_user_id", "batch_id": batch_id}
-
     # Validate user exists before processing
     with SessionLocal() as db:
         user_repo = UserRepository(User)
-        if not user_repo.get(db, user_uuid):
+        if not user_repo.get(db, user_id):
             log_structured(
                 logger,
                 "warning",
@@ -132,7 +116,7 @@ def process_sdk_upload(
     )
 
     started(
-        user_uuid,
+        user_id,
         provider,
         SyncSource.SDK,
         run_id=batch_id,
@@ -143,7 +127,7 @@ def process_sdk_upload(
     with SessionLocal() as db:
         # Ensure SDK connection exists for this user (SDK-based, no OAuth tokens)
         connection_repo = UserConnectionRepository()
-        connection_repo.ensure_sdk_connection(db, user_uuid, provider)
+        connection_repo.ensure_sdk_connection(db, user_id, provider)
 
         # Select the appropriate import service based on source
         import_service = _get_import_service(provider)
@@ -182,7 +166,7 @@ def process_sdk_upload(
             if dropped_count:
                 message += f" ({dropped_count} record(s) dropped by validation)"
             completed(
-                user_uuid,
+                user_id,
                 provider,
                 SyncSource.SDK,
                 run_id=batch_id,
@@ -204,7 +188,7 @@ def process_sdk_upload(
                 delete_payload_from_s3(payload_ref)
         else:
             failed(
-                user_uuid,
+                user_id,
                 provider,
                 SyncSource.SDK,
                 run_id=batch_id,

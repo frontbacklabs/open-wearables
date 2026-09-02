@@ -3,6 +3,7 @@
 import logging
 import os
 import random
+import string
 from datetime import date, datetime, timedelta, timezone
 
 from faker import Faker
@@ -24,6 +25,19 @@ from .event_generators import _generate_personal_record, _generate_sleep, _gener
 from .health_score_generators import _generate_health_scores
 from .support_generators import _generate_time_series_samples, _generate_user_connections
 from .time_series_generators import ProviderDescriptor, _generate_continuous_time_series
+
+_FIREBASE_UID_ALPHABET = string.ascii_letters + string.digits
+
+
+def _seed_user_id(rng: random.Random) -> str:
+    """Mint a Firebase-UID-shaped id for a synthetic user.
+
+    Real user ids are mirrored from Ren and never generated here; seed users have no Ren
+    counterpart, so they get an id of the same shape (28 mixed-case alphanumerics) drawn
+    from the request's seeded rng, keeping a given seed reproducible.
+    """
+    return "".join(rng.choices(_FIREBASE_UID_ALPHABET, k=28))
+
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +135,7 @@ class SeedDataService:
             user = user_service.create(
                 db,
                 UserCreate(
+                    id=_seed_user_id(random),
                     first_name=f"[SEED:{seed}|{profile.preset or 'custom'}] {identity_fake.first_name()}",
                     last_name=identity_fake.last_name(),
                     email=identity_fake.unique.email(),

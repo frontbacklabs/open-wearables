@@ -169,7 +169,7 @@ class XMLService:
     def _create_record(
         self,
         document: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> HeartRateSampleCreate | StepSampleCreate | TimeSeriesSampleCreate | None:
         """Create a time series record from an XML document.
 
@@ -228,7 +228,7 @@ class XMLService:
     def _create_workout(
         self,
         document: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
         metrics: EventRecordMetrics | None = None,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         document = self._parse_date_fields(document)

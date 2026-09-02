@@ -77,7 +77,7 @@ class FitParseResult:
 
 def parse_fit_file(
     data: bytes,
-    user_id: UUID,
+    user_id: str,
     data_source_id: UUID | None = None,
     source: str | None = None,
 ) -> FitParseResult:

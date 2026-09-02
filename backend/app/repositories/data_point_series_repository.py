@@ -268,7 +268,7 @@ class DataPointSeriesRepository(
         db_session: DbSession,
         params: TimeSeriesQueryParams,
         types: list[SeriesType],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[list[tuple[DataPointSeries, DataSource]], int]:
         """Get data points with filtering and keyset pagination.
 
@@ -397,7 +397,7 @@ class DataPointSeriesRepository(
     def get_user_counts_by_provider_and_type(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
     ) -> list[tuple[str, str, int]]:
@@ -500,7 +500,7 @@ class DataPointSeriesRepository(
     def get_daily_activity_aggregates(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[ActivityAggregateResult]:
@@ -636,7 +636,7 @@ class DataPointSeriesRepository(
     def get_daily_active_minutes(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         active_threshold: int = 30,
@@ -735,7 +735,7 @@ class DataPointSeriesRepository(
     def get_daily_intensity_minutes(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         light_min: int,
@@ -860,7 +860,7 @@ class DataPointSeriesRepository(
     def get_latest_values_for_types(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         before_date: datetime,
         series_types: list[SeriesType],
     ) -> dict[SeriesType, tuple[float, datetime, str | None, str | None, str | None, str | None]]:
@@ -947,7 +947,7 @@ class DataPointSeriesRepository(
     def get_aggregates_for_period(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         series_types: list[SeriesType],
@@ -1003,7 +1003,7 @@ class DataPointSeriesRepository(
     def get_latest_reading_within_window(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         series_type: SeriesType,
         window_start: datetime,
         window_end: datetime,
@@ -1060,7 +1060,7 @@ class DataPointSeriesRepository(
     def query_series(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         type_id: int,
         start_dt: datetime,
         end_dt: datetime,

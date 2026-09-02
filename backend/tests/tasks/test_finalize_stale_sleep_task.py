@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.integrations.celery.tasks.finalize_stale_sleep_task import finalize_stale_sleeps
 from app.schemas.providers.mobile_sdk import SleepState
+from tests.factories import fake_firebase_uid
 
 
 class TestFinalizeStaleSleepsTask:
@@ -58,7 +59,7 @@ class TestFinalizeStaleSleepsTask:
     ) -> None:
         """Verify task finalizes sleep sessions older than threshold."""
         # Arrange
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         now = datetime.now(timezone.utc)
         stale_timestamp = now - timedelta(hours=2)  # Older than 1 hour threshold
 
@@ -110,7 +111,7 @@ class TestFinalizeStaleSleepsTask:
     ) -> None:
         """Verify task does not finalize recent sleep sessions."""
         # Arrange
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         now = datetime.now(timezone.utc)
         recent_timestamp = now - timedelta(minutes=30)  # Less than 1 hour threshold
 
@@ -160,7 +161,7 @@ class TestFinalizeStaleSleepsTask:
     ) -> None:
         """Verify task gracefully handles users with no sleep state."""
         # Arrange
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         mock_session_local.return_value.__enter__ = MagicMock(return_value=db)
         mock_session_local.return_value.__exit__ = MagicMock(return_value=None)
@@ -348,7 +349,7 @@ class TestFinalizeStaleSleepsTask:
     ) -> None:
         """Verify task skips users whose sleep state cannot be parsed from Redis."""
         # Arrange
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         mock_session_local.return_value.__enter__ = MagicMock(return_value=db)
         mock_session_local.return_value.__exit__ = MagicMock(return_value=None)

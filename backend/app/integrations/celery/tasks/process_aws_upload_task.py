@@ -3,7 +3,6 @@ import json
 from logging import getLogger
 from pathlib import Path
 from typing import Any, BinaryIO
-from uuid import UUID
 
 from botocore.exceptions import ClientError
 from celery import Task, shared_task
@@ -134,13 +133,6 @@ def _release_import_claim(bucket_name: str, object_key: str, user_id: str, run_i
         logger.warning("Unable to release failed Apple XML import claim", exc_info=True)
 
 
-def _as_uuid(user_id: str) -> UUID | None:
-    try:
-        return UUID(user_id)
-    except (TypeError, ValueError):
-        return None
-
-
 def _run_import_task(
     task: Task,
     *,
@@ -163,11 +155,10 @@ def _run_import_task(
             "message": "Import is already being processed",
         }
 
-    user_uuid = _as_uuid(user_id)
     metadata = {"bucket": bucket_name, "object_key": object_key}
-    if user_uuid is not None and task.request.retries == 0:
+    if task.request.retries == 0:
         started(
-            user_uuid,
+            user_id,
             "apple",
             SyncSource.XML_IMPORT,
             run_id=run_id,
@@ -185,16 +176,15 @@ def _run_import_task(
             _store_upload_completion(bucket_name, object_key, user_id)
         result = _process_aws_upload(bucket_name, object_key, user_id)
         _store_completed_import(bucket_name, object_key, user_id, result)
-        if user_uuid is not None:
-            completed(
-                user_uuid,
-                "apple",
-                SyncSource.XML_IMPORT,
-                run_id=run_id,
-                status=SyncStatus.SKIPPED if result["status"] == "skipped" else SyncStatus.SUCCESS,
-                message=result.get("message") or result.get("reason") or "Apple Health XML import completed",
-                metadata=metadata,
-            )
+        completed(
+            user_id,
+            "apple",
+            SyncSource.XML_IMPORT,
+            run_id=run_id,
+            status=SyncStatus.SKIPPED if result["status"] == "skipped" else SyncStatus.SUCCESS,
+            message=result.get("message") or result.get("reason") or "Apple Health XML import completed",
+            metadata=metadata,
+        )
         return result
     except Exception as exc:
         retryable = not isinstance(exc, HTTPException) or exc.status_code >= 500
@@ -203,16 +193,15 @@ def _run_import_task(
             raise task.retry(exc=exc, countdown=min(10 * (2**task.request.retries), 300)) from exc
 
         _release_import_claim(bucket_name, object_key, user_id, run_id)
-        if user_uuid is not None:
-            failed(
-                user_uuid,
-                "apple",
-                SyncSource.XML_IMPORT,
-                run_id=run_id,
-                error=str(exc),
-                message="Apple Health XML import failed",
-                metadata=metadata,
-            )
+        failed(
+            user_id,
+            "apple",
+            SyncSource.XML_IMPORT,
+            run_id=run_id,
+            error=str(exc),
+            message="Apple Health XML import failed",
+            metadata=metadata,
+        )
         raise
 
 

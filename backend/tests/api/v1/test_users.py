@@ -12,7 +12,7 @@ Tests cover:
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory
+from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory, fake_firebase_uid
 from tests.utils import api_key_headers, developer_auth_headers
 
 
@@ -143,8 +143,8 @@ class TestGetUser:
         # Assert
         assert response.status_code == 404
 
-    def test_get_user_invalid_uuid(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
-        """Test getting user with invalid UUID format."""
+    def test_get_user_unknown_id_is_not_found(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """Ids are free-form text (Firebase UIDs), so an unknown one is 404, not a 400."""
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
@@ -154,7 +154,7 @@ class TestGetUser:
         response = client.get(f"{api_v1_prefix}/users/not-a-uuid", headers=headers)
 
         # Assert
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_get_user_unauthorized(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
         """Test getting user fails without API key."""
@@ -177,7 +177,9 @@ class TestCreateUser:
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         headers = api_key_headers(api_key.id)
+        user_id = fake_firebase_uid()
         payload = {
+            "id": user_id,
             "email": "newuser@example.com",
             "first_name": "Alice",
             "last_name": "Johnson",
@@ -205,12 +207,13 @@ class TestCreateUser:
         assert user.email == "newuser@example.com"
 
     def test_create_user_minimal_data(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
-        """Test creating user with minimal fields."""
+        """Test creating user with minimal fields: the id alone."""
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         headers = api_key_headers(api_key.id)
-        payload = {}
+        user_id = fake_firebase_uid()
+        payload = {"id": user_id}
 
         # Act
         response = client.post(f"{api_v1_prefix}/users", json=payload, headers=headers)
@@ -218,8 +221,36 @@ class TestCreateUser:
         # Assert
         assert response.status_code == 201
         data = response.json()
-        assert "id" in data
+        assert data["id"] == user_id
         assert "created_at" in data
+
+    def test_create_user_without_id_is_rejected(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """The id mirrors the caller's user row, so it can never be omitted."""
+        # Arrange
+        developer = DeveloperFactory(email="test@example.com", password="test123")
+        api_key = ApiKeyFactory(developer=developer)
+        headers = api_key_headers(api_key.id)
+
+        # Act
+        response = client.post(f"{api_v1_prefix}/users", json={"email": "noid@example.com"}, headers=headers)
+
+        # Assert - this app maps RequestValidationError to 400
+        assert response.status_code == 400
+
+    def test_create_user_duplicate_id_is_rejected(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """A repeated id is a conflict: the mirror is one-to-one."""
+        # Arrange
+        developer = DeveloperFactory(email="test@example.com", password="test123")
+        api_key = ApiKeyFactory(developer=developer)
+        headers = api_key_headers(api_key.id)
+        existing = UserFactory(email="existing@example.com")
+
+        # Act
+        payload = {"id": existing.id, "email": "duplicate@example.com"}
+        response = client.post(f"{api_v1_prefix}/users", json=payload, headers=headers)
+
+        # Assert
+        assert response.status_code == 409
 
     def test_create_user_only_email(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
         """Test creating user with only email."""
@@ -227,7 +258,7 @@ class TestCreateUser:
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         headers = api_key_headers(api_key.id)
-        payload = {"email": "onlyemail@example.com"}
+        payload = {"id": fake_firebase_uid(), "email": "onlyemail@example.com"}
 
         # Act
         response = client.post(f"{api_v1_prefix}/users", json=payload, headers=headers)
@@ -462,8 +493,8 @@ class TestDeleteUser:
         # Assert
         assert response.status_code == 404
 
-    def test_delete_user_invalid_uuid(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
-        """Test deleting user with invalid UUID format."""
+    def test_delete_user_unknown_id_is_not_found(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """Ids are free-form text (Firebase UIDs), so an unknown one is 404, not a 400."""
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         headers = developer_auth_headers(developer.id)
@@ -472,7 +503,7 @@ class TestDeleteUser:
         response = client.delete(f"{api_v1_prefix}/users/not-a-uuid", headers=headers)
 
         # Assert
-        assert response.status_code == 400
+        assert response.status_code == 404
 
     def test_delete_user_unauthorized(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
         """Test deleting user fails without authentication."""

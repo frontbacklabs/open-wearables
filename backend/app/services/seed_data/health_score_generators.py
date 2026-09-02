@@ -1,7 +1,7 @@
 """Generator for provider health score seed data."""
 
 from datetime import datetime, timedelta
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from faker import Faker
 
@@ -18,7 +18,7 @@ from .constants import (
 
 
 def _generate_health_scores(
-    user_id: UUID,
+    user_id: str,
     provider: ProviderName,
     start_bound: datetime,
     end_bound: datetime,
@@ -41,7 +41,7 @@ def _generate_health_scores(
 
 
 def _generate_oura_scores(
-    user_id: UUID,
+    user_id: str,
     start_bound: datetime,
     end_bound: datetime,
     fake: Faker,
@@ -106,7 +106,7 @@ def _generate_oura_scores(
 
 
 def _generate_garmin_scores(
-    user_id: UUID,
+    user_id: str,
     start_bound: datetime,
     end_bound: datetime,
     fake: Faker,
@@ -174,7 +174,7 @@ def _generate_garmin_scores(
 
 
 def _generate_whoop_scores(
-    user_id: UUID,
+    user_id: str,
     start_bound: datetime,
     end_bound: datetime,
     fake: Faker,

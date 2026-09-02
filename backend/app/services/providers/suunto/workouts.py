@@ -38,7 +38,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -53,7 +53,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
         response = self._make_api_request(db, user_id, "/v3/workouts/", params=params, headers=headers)
         return response.get("payload", [])
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get workouts from Suunto API with specific options."""
         since = kwargs.get("since", 0)
         limit = kwargs.get("limit", 50)
@@ -72,7 +72,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
 
         return self._make_api_request(db, user_id, "/v3/workouts/", params=params, headers=headers)
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed workout data from Suunto API."""
         return self.get_workout_detail(db, user_id, workout_id)
 
@@ -144,7 +144,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: SuuntoWorkoutJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Suunto workout to EventRecordCreate."""
         workout_id = uuid4()
@@ -207,7 +207,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
     def _build_bundles(
         self,
         raw: list[SuuntoWorkoutJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         """Build event record payloads for Suunto workouts."""
         for raw_workout in raw:
@@ -217,7 +217,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """Load data from Suunto API."""
@@ -270,7 +270,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
     def get_workout_detail(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         workout_key: str,
         extensions: list[str] | None = None,
     ) -> dict:
@@ -285,7 +285,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
             params = {"extensions": ",".join(extensions)}
         return self._make_api_request(db, user_id, f"/v3/workouts/{workout_key}", params=params, headers=headers)
 
-    def process_push_activity(self, db: DbSession, user_id: UUID, raw_workout: Any) -> UUID | None:
+    def process_push_activity(self, db: DbSession, user_id: str, raw_workout: Any) -> UUID | None:
         """Save a single workout received via the live webhook push path.
 
         Mirrors the load_data backfill path: builds the record + detail bundle

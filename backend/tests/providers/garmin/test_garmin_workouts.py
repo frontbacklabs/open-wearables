@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -17,7 +16,7 @@ from app.schemas.model_crud.activities import EventRecordCreate, EventRecordDeta
 from app.schemas.providers.garmin import ActivityJSON as GarminActivityJSON
 from app.services.providers.garmin.oauth import GarminOAuth
 from app.services.providers.garmin.workouts import GarminWorkouts
-from tests.factories import UserConnectionFactory, UserFactory
+from tests.factories import UserConnectionFactory, UserFactory, fake_firebase_uid
 
 
 class TestGarminWorkouts:
@@ -152,7 +151,7 @@ class TestGarminWorkouts:
 
     def test_normalize_workout(self, garmin_workouts: GarminWorkouts, sample_activity: dict[str, Any]) -> None:
         """Test normalizing Garmin activity to event record."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         activity = GarminActivityJSON(**sample_activity)
 
         record, detail = garmin_workouts._normalize_workout(activity, user_id)
@@ -169,7 +168,7 @@ class TestGarminWorkouts:
 
     def test_normalize_workout_with_different_types(self, garmin_workouts: GarminWorkouts) -> None:
         """Test normalizing different workout types."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         test_cases = [
             ("RUNNING", WorkoutType.RUNNING),
@@ -199,7 +198,7 @@ class TestGarminWorkouts:
 
     def test_build_bundles(self, garmin_workouts: GarminWorkouts, sample_activity: dict[str, Any]) -> None:
         """Test building bundles from multiple activities."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         activity1 = GarminActivityJSON(**sample_activity)
         activity2 = GarminActivityJSON(
             userId=sample_activity["userId"],

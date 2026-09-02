@@ -1,5 +1,3 @@
-from uuid import UUID
-
 from fastapi import APIRouter, status
 
 from app.database import DbSession
@@ -19,7 +17,7 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 def generate_invitation_code(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     developer: DeveloperDep,
 ) -> UserInvitationCodeRead:

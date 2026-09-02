@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Query
 
@@ -21,7 +20,7 @@ router = APIRouter()
 
 @router.get("/users/{user_id}/summaries/activity")
 def get_activity_summary(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -43,7 +42,7 @@ def get_activity_summary(
 
 @router.get("/users/{user_id}/summaries/sleep")
 def get_sleep_summary(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -59,7 +58,7 @@ def get_sleep_summary(
 
 @router.get("/users/{user_id}/summaries/recovery")
 def get_recovery_summary(
-    user_id: UUID,
+    user_id: str,
     start_date: DateTimeQueryParam,
     end_date: DateTimeQueryParam,
     db: DbSession,
@@ -85,7 +84,7 @@ def get_recovery_summary(
 
 @router.get("/users/{user_id}/summaries/body")
 def get_body_summary(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     average_period: Annotated[int, Query(ge=1, le=7, description="Days to average vitals (1-7)")] = 7,
@@ -110,7 +109,7 @@ def get_body_summary(
 
 @router.get("/users/{user_id}/summaries/data")
 def get_data_summary(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     start_date: DateTimeQueryParam | None = None,

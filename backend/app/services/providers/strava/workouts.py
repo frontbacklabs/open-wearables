@@ -40,7 +40,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -111,7 +111,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
 
         return all_activities
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get activities from Strava API with specific options."""
         page = kwargs.get("page", 1)
         per_page = self.events_per_page
@@ -131,7 +131,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
         # hard-coded value - update with base template changes
         return self._make_api_request(db, user_id, "/api/v3/athlete/activities", params=params)
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed activity data from Strava API."""
         # hard-coded value - update with base template changes
         return self._make_api_request(db, user_id, f"/api/v3/activities/{workout_id}")
@@ -195,7 +195,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: StravaActivityJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Strava activity to EventRecordCreate and EventRecordDetailCreate."""
         workout_id = uuid4()
@@ -242,7 +242,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
     def _build_workout_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         strava_activity_id: int | str,
         start_dt: datetime,
         zone_offset: str | None,
@@ -304,7 +304,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
         self,
         db: DbSession,
         activity: StravaActivityJSON,
-        user_id: UUID,
+        user_id: str,
         record: EventRecordCreate,
     ) -> int:
         """Fetch + persist per-sample streams on workout arrival, flag-gated and failure-isolated."""
@@ -349,7 +349,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """Load data from Strava API (historical backfill).
@@ -414,7 +414,7 @@ class StravaWorkouts(BaseWorkoutsTemplate):
         self,
         db: DbSession,
         activity: StravaActivityJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> list[UUID]:
         """Process a single activity from webhook and save to database.
 

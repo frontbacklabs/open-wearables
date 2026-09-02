@@ -2,7 +2,7 @@
 
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.integrations.redis_client import get_redis_client
 from app.services.providers.garmin.backfill_config import (
@@ -17,7 +17,7 @@ from app.utils.structured_logging import log_structured
 logger = logging.getLogger(__name__)
 
 
-def _get_key(user_id: str | UUID, *parts: str) -> str:
+def _get_key(user_id: str, *parts: str) -> str:
     """Generate a namespaced Redis key for backfill tracking."""
     return ":".join([REDIS_PREFIX, str(user_id), *parts])
 
@@ -27,21 +27,21 @@ def _get_key(user_id: str | UUID, *parts: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def set_trace_id(user_id: str | UUID) -> str:
+def set_trace_id(user_id: str) -> str:
     """Generate and store a session-level trace ID for a user's backfill."""
     trace_id = str(uuid4())[:8]
     get_redis_client().setex(_get_key(user_id, "trace_id"), REDIS_TTL, trace_id)
     return trace_id
 
 
-def get_trace_id(user_id: str | UUID, data_type: str | None = None) -> str | None:
+def get_trace_id(user_id: str, data_type: str | None = None) -> str | None:
     """Return the active backfill trace ID for a user, optionally per-type."""
     if data_type:
         return get_redis_client().get(_get_key(user_id, "types", data_type, "trace_id"))  # ty:ignore[invalid-return-type]
     return get_redis_client().get(_get_key(user_id, "trace_id"))  # ty:ignore[invalid-return-type]
 
 
-def set_type_trace_id(user_id: str | UUID, data_type: str) -> str:
+def set_type_trace_id(user_id: str, data_type: str) -> str:
     """Generate and store a per-type trace ID for a specific backfill data type."""
     trace_id = str(uuid4())[:8]
     get_redis_client().setex(_get_key(user_id, "types", data_type, "trace_id"), REDIS_TTL, trace_id)
@@ -53,7 +53,7 @@ def set_type_trace_id(user_id: str | UUID, data_type: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def acquire_backfill_lock(user_id: str | UUID) -> str | None:
+def acquire_backfill_lock(user_id: str) -> str | None:
     """Try to acquire exclusive backfill lock.
 
     Returns a unique token string on success, or None if already locked.
@@ -77,7 +77,7 @@ end
 """
 
 
-def release_backfill_lock(user_id: str | UUID, token: str | None = None) -> bool:
+def release_backfill_lock(user_id: str, token: str | None = None) -> bool:
     """Atomically release the backfill lock if it still belongs to the caller.
 
     If *token* is omitted the stored companion key is used (enables cross-task
@@ -96,7 +96,7 @@ def release_backfill_lock(user_id: str | UUID, token: str | None = None) -> bool
     return result
 
 
-def force_release_backfill_lock(user_id: str | UUID) -> None:
+def force_release_backfill_lock(user_id: str) -> None:
     """Unconditionally release the backfill lock — use only from GC / admin paths."""
     uid = str(user_id)
     get_redis_client().delete(_get_key(uid, "lock"), _get_key(uid, "lock_token"))
@@ -107,17 +107,17 @@ def force_release_backfill_lock(user_id: str | UUID) -> None:
 # ---------------------------------------------------------------------------
 
 
-def set_cancel_flag(user_id: str | UUID) -> None:
+def set_cancel_flag(user_id: str) -> None:
     """Set the cancel flag for a user's backfill."""
     get_redis_client().setex(_get_key(str(user_id), "cancel_flag"), REDIS_TTL, "1")
 
 
-def is_cancelled(user_id: str | UUID) -> bool:
+def is_cancelled(user_id: str) -> bool:
     """Return True if the backfill cancel flag is set."""
     return get_redis_client().get(_get_key(str(user_id), "cancel_flag")) == "1"
 
 
-def clear_cancel_flag(user_id: str | UUID) -> None:
+def clear_cancel_flag(user_id: str) -> None:
     """Clear the backfill cancel flag."""
     get_redis_client().delete(_get_key(str(user_id), "cancel_flag"))
 
@@ -127,7 +127,7 @@ def clear_cancel_flag(user_id: str | UUID) -> None:
 # ---------------------------------------------------------------------------
 
 
-def complete_backfill(user_id: str | UUID) -> None:
+def complete_backfill(user_id: str) -> None:
     """Mark the entire backfill as complete."""
     from app.services.providers.garmin.backfill_state.window_state import get_completed_window_count
 
@@ -151,7 +151,7 @@ def complete_backfill(user_id: str | UUID) -> None:
 # ---------------------------------------------------------------------------
 
 
-def get_backfill_status(user_id: str | UUID) -> dict[str, Any]:
+def get_backfill_status(user_id: str) -> dict[str, Any]:
     """Return a full backfill status dict with per-window-per-type matrix."""
     from app.services.providers.garmin.backfill_state.window_state import (
         get_current_window,

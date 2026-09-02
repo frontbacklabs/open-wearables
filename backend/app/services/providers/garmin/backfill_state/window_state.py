@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 
 from app.integrations.redis_client import get_redis_client
 from app.services.providers.garmin.backfill_config import (
@@ -19,7 +18,7 @@ from app.utils.structured_logging import log_structured
 logger = logging.getLogger(__name__)
 
 
-def init_window_state(user_id: str | UUID, total_windows: int = BACKFILL_WINDOW_COUNT) -> None:
+def init_window_state(user_id: str, total_windows: int = BACKFILL_WINDOW_COUNT) -> None:
     """Initialise multi-window backfill state in Redis."""
     uid = str(user_id)
     anchor = datetime.now(timezone.utc).isoformat()
@@ -29,19 +28,19 @@ def init_window_state(user_id: str | UUID, total_windows: int = BACKFILL_WINDOW_
     get_redis_client().setex(_get_key(uid, "window", "completed_count"), REDIS_TTL, "0")
 
 
-def get_current_window(user_id: str | UUID) -> int:
+def get_current_window(user_id: str) -> int:
     """Return the current window index (0-indexed)."""
     val = get_redis_client().get(_get_key(str(user_id), "window", "current"))
     return int(val) if val else 0
 
 
-def get_total_windows(user_id: str | UUID) -> int:
+def get_total_windows(user_id: str) -> int:
     """Return the total number of windows for this backfill."""
     val = get_redis_client().get(_get_key(str(user_id), "window", "total"))
     return int(val) if val else BACKFILL_WINDOW_COUNT
 
 
-def get_anchor_timestamp(user_id: str | UUID) -> datetime:
+def get_anchor_timestamp(user_id: str) -> datetime:
     """Return the fixed anchor timestamp used for window date calculation."""
     val = get_redis_client().get(_get_key(str(user_id), "window", "anchor_ts"))
     if val:
@@ -49,7 +48,7 @@ def get_anchor_timestamp(user_id: str | UUID) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def get_window_date_range(user_id: str | UUID) -> tuple[datetime, datetime]:
+def get_window_date_range(user_id: str) -> tuple[datetime, datetime]:
     """Return (start_time, end_time) for the current window.
 
     Window 0: anchor-30d → anchor
@@ -63,7 +62,7 @@ def get_window_date_range(user_id: str | UUID) -> tuple[datetime, datetime]:
     return start_time, end_time
 
 
-def get_window_date_range_for_index(user_id: str | UUID, window_idx: int) -> tuple[datetime, datetime]:
+def get_window_date_range_for_index(user_id: str, window_idx: int) -> tuple[datetime, datetime]:
     """Return (start_time, end_time) for an explicit window index."""
     anchor = get_anchor_timestamp(user_id)
     chunk = BACKFILL_CHUNK_DAYS
@@ -72,20 +71,20 @@ def get_window_date_range_for_index(user_id: str | UUID, window_idx: int) -> tup
     return start_time, end_time
 
 
-def get_completed_window_count(user_id: str | UUID) -> int:
+def get_completed_window_count(user_id: str) -> int:
     """Return the number of completed windows."""
     val = get_redis_client().get(_get_key(str(user_id), "window", "completed_count"))
     return int(val) if val else 0
 
 
-def update_window_cell(user_id: str | UUID, window_idx: int, data_type: str, status: str) -> None:
+def update_window_cell(user_id: str, window_idx: int, data_type: str, status: str) -> None:
     """Write directly to a matrix cell (used after retry completes)."""
     uid = str(user_id)
     window_key = f"{REDIS_PREFIX}:{uid}:w:{window_idx}:{data_type}:status"
     get_redis_client().setex(window_key, REDIS_TTL, status)
 
 
-def persist_window_results(user_id: str | UUID, window_idx: int) -> None:
+def persist_window_results(user_id: str, window_idx: int) -> None:
     """Persist per-type results for a window to matrix keys.
 
     Maps orchestration status → matrix state:
@@ -117,7 +116,7 @@ def persist_window_results(user_id: str | UUID, window_idx: int) -> None:
     )
 
 
-def advance_window(user_id: str | UUID) -> bool:
+def advance_window(user_id: str) -> bool:
     """Advance to the next window. Returns True if more windows remain."""
     uid = str(user_id)
     current_window_before = get_current_window(uid)

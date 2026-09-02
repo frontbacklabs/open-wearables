@@ -12,6 +12,7 @@ import pytest
 from app.schemas.enums import SeriesType
 from app.services.providers.suunto.data_247 import Suunto247Data
 from app.services.providers.suunto.strategy import SuuntoStrategy
+from tests.factories import fake_firebase_uid
 
 
 @pytest.fixture
@@ -25,7 +26,7 @@ def data_247() -> Suunto247Data:
 def base_sleep() -> dict:
     return {
         "id": uuid4(),
-        "user_id": uuid4(),
+        "user_id": fake_firebase_uid(),
         "provider": "suunto",
         "is_nap": False,
         "min_heart_rate_bpm": 52.0,
@@ -59,7 +60,7 @@ class TestSuuntoSleepNormalization:
                 "SleepId": 1778976780,
             },
         }
-        result = data_247.normalize_sleep(raw, uuid4())
+        result = data_247.normalize_sleep(raw, fake_firebase_uid())
 
         assert result["avg_heart_rate_bpm"] == 67.0
         assert result["min_heart_rate_bpm"] == 52.0
@@ -169,14 +170,16 @@ class TestSuuntoSleepSyncStats:
 
     @patch("app.services.providers.suunto.data_247.event_record_service")
     def test_save_sleep_data_reports_success(self, mock_event: MagicMock, data_247: Suunto247Data) -> None:
-        assert data_247.save_sleep_data(MagicMock(), uuid4(), _normalized_sleep()) is True
+        assert data_247.save_sleep_data(MagicMock(), fake_firebase_uid(), _normalized_sleep()) is True
         mock_event.create_or_merge_sleep.assert_called_once()
 
     @patch("app.services.providers.suunto.data_247.event_record_service")
     def test_save_sleep_data_reports_skip_for_missing_window(
         self, mock_event: MagicMock, data_247: Suunto247Data
     ) -> None:
-        skipped = data_247.save_sleep_data(MagicMock(), uuid4(), _normalized_sleep(start_time=None, end_time=None))
+        skipped = data_247.save_sleep_data(
+            MagicMock(), fake_firebase_uid(), _normalized_sleep(start_time=None, end_time=None)
+        )
 
         assert skipped is False
         mock_event.create_or_merge_sleep.assert_not_called()
@@ -196,7 +199,7 @@ class TestSuuntoSleepSyncStats:
 
         with patch.object(data_247, "get_sleep_data", return_value=[saveable, unsaveable]):
             saved, skipped = data_247.load_and_save_sleep(
-                MagicMock(), uuid4(), datetime.now(timezone.utc), datetime.now(timezone.utc)
+                MagicMock(), fake_firebase_uid(), datetime.now(timezone.utc), datetime.now(timezone.utc)
             )
 
         assert (saved, skipped) == (1, 1)
@@ -208,7 +211,7 @@ class TestSuuntoSleepSyncStats:
             patch.object(data_247, "get_activity_samples", return_value=[]),
             patch.object(data_247, "get_daily_activity_statistics", return_value=[]),
         ):
-            results = data_247.load_and_save_all(MagicMock(), uuid4())
+            results = data_247.load_and_save_all(MagicMock(), fake_firebase_uid())
 
         assert results["sleep_sessions_synced"] == 2
         assert results["sleep_sessions_skipped"] == 3

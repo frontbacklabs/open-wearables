@@ -11,7 +11,6 @@ Covers:
 from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 
@@ -19,6 +18,7 @@ from app.schemas.enums import WorkoutType
 from app.services.providers.api_client import make_authenticated_request
 from app.services.providers.sensorbio.data_247 import SensorBio247Data
 from app.services.providers.sensorbio.workouts import SensorBioWorkouts
+from tests.factories import fake_firebase_uid
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -60,7 +60,7 @@ def data_247(mock_connection_repo: MagicMock, mock_oauth: MagicMock) -> SensorBi
     )
 
 
-USER_ID = uuid4()
+USER_ID = fake_firebase_uid()
 DB = MagicMock()
 
 

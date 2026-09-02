@@ -60,7 +60,7 @@ class PriorityService:
     def get_user_data_sources(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> DataSourceListResponse:
         sources = self.data_source_repo.get_user_data_sources(db_session, user_id)
         items = [
@@ -113,7 +113,7 @@ class PriorityService:
     def get_priority_data_source_ids(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> list[UUID]:
         """Get data source IDs for a user, ordered by global priority."""
         provider_order = self.priority_repo.get_priority_order(db_session)
@@ -140,7 +140,7 @@ class PriorityService:
     def get_best_data_source_id(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> UUID | None:
         ids = self.get_priority_data_source_ids(db_session, user_id)
         return ids[0] if ids else None

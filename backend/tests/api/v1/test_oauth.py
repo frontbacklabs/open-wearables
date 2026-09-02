@@ -8,12 +8,11 @@ Tests the /api/v1/oauth endpoints including:
 """
 
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from tests.factories import DeveloperFactory
+from tests.factories import DeveloperFactory, fake_firebase_uid
 from tests.utils import developer_auth_headers
 
 
@@ -23,7 +22,7 @@ class TestOAuthAuthorizeEndpoint:
     def test_authorize_provider_success(self, client: TestClient, db: Session) -> None:
         """Test successfully initiating OAuth flow for a provider."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         response = client.get(
@@ -43,7 +42,7 @@ class TestOAuthAuthorizeEndpoint:
     def test_authorize_provider_with_redirect_uri(self, client: TestClient, db: Session) -> None:
         """Test OAuth flow with optional redirect URI."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         redirect_uri = "https://myapp.com/oauth/callback"
 
         # Act
@@ -64,7 +63,7 @@ class TestOAuthAuthorizeEndpoint:
     def test_authorize_different_providers(self, client: TestClient, db: Session) -> None:
         """Test initiating OAuth for different providers."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         providers = ["garmin", "polar", "suunto"]
 
         for provider in providers:
@@ -88,21 +87,10 @@ class TestOAuthAuthorizeEndpoint:
         # Assert
         assert response.status_code == 400
 
-    def test_authorize_invalid_user_id(self, client: TestClient, db: Session) -> None:
-        """Test authorization with invalid user_id format."""
-        # Act
-        response = client.get(
-            "/api/v1/oauth/garmin/authorize",
-            params={"user_id": "not-a-uuid"},
-        )
-
-        # Assert
-        assert response.status_code == 400
-
     def test_authorize_invalid_provider(self, client: TestClient, db: Session) -> None:
         """Test authorization with non-existent provider."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         response = client.get(
@@ -116,7 +104,7 @@ class TestOAuthAuthorizeEndpoint:
     def test_authorize_non_oauth_provider(self, client: TestClient, db: Session) -> None:
         """Test authorization with provider that doesn't support OAuth."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act - Try to authorize with "apple" which uses file import, not OAuth
         response = client.get(

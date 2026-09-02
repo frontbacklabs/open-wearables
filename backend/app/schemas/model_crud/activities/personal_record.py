@@ -17,7 +17,7 @@ class PersonalRecordBase(BaseModel):
 
 class PersonalRecordCreate(PersonalRecordBase):
     id: UUID
-    user_id: UUID
+    user_id: str
 
 
 class PersonalRecordUpdate(PersonalRecordBase): ...
@@ -25,4 +25,4 @@ class PersonalRecordUpdate(PersonalRecordBase): ...
 
 class PersonalRecordResponse(PersonalRecordBase):
     id: UUID
-    user_id: UUID
+    user_id: str

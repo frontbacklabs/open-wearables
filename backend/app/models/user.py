@@ -1,16 +1,22 @@
-from uuid import UUID
 from datetime import datetime
 
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import BaseDbModel
-from app.mappings import PrimaryKey, Unique, email, str_100, str_255
+from app.mappings import Unique, email, str_100, str_255
 
 
 class User(BaseDbModel):
-    """Data owner model"""
+    """Data owner model.
 
-    id: Mapped[PrimaryKey[UUID]]
+    ``id`` is the Firebase UID of the corresponding row in the Ren database, supplied
+    by the caller of ``POST /users`` rather than generated here. The two databases hold
+    a strict one-to-one mirror of the same user population keyed on the same id, so
+    nothing may mint a user id locally.
+    """
+
+    id: Mapped[str] = mapped_column(String(255), primary_key=True)
 
     first_name: Mapped[str_100 | None]
     last_name: Mapped[str_100 | None]

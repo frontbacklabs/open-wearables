@@ -2,7 +2,6 @@
 
 from logging import getLogger
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Path
 
@@ -21,6 +20,6 @@ priority_service = PriorityService(log=getLogger(__name__))
 def get_user_data_sources(
     db: DbSession,
     _api_key: ApiKeyDep,
-    user_id: Annotated[UUID, Path(description="User ID")],
+    user_id: Annotated[str, Path(description="User ID")],
 ) -> DataSourceListResponse:
     return priority_service.get_user_data_sources(db, user_id)

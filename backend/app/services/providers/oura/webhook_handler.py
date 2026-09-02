@@ -31,7 +31,7 @@ See: https://cloud.ouraring.com/v2/docs#tag/Webhook-Subscription-Routes
 import json
 import logging
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from celery import current_app as celery_app
 from fastapi import HTTPException, Request
@@ -231,7 +231,7 @@ class OuraWebhookHandler(BaseWebhookHandler):
                 "data_type": notification.data_type,
             }
 
-        user_id: UUID = connection.user_id
+        user_id: str = connection.user_id
 
         log_structured(
             logger,
@@ -298,7 +298,7 @@ class OuraWebhookHandler(BaseWebhookHandler):
         self,
         db: DbSession,
         notification: OuraWebhookNotification,
-        user_id: UUID,
+        user_id: str,
         trace_id: str,
     ) -> int | None:
         data_type = notification.data_type

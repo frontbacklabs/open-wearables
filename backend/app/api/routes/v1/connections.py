@@ -1,5 +1,4 @@
 import contextlib
-from uuid import UUID
 
 from fastapi import APIRouter, Response, status
 
@@ -47,7 +46,7 @@ def _with_capabilities(
 
 @router.get("/users/{user_id}/connections", response_model=list[UserConnectionWithCapabilities])
 def get_connections_endpoint(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
 ):
@@ -72,7 +71,7 @@ def get_connections_endpoint(
 
 @router.delete("/users/{user_id}/connections/{provider}")
 def disconnect_provider_endpoint(
-    user_id: UUID,
+    user_id: str,
     provider: ProviderName,
     db: DbSession,
     _api_key: ApiKeyDep,
@@ -85,7 +84,7 @@ def disconnect_provider_endpoint(
 
 @router.delete("/users/{user_id}/connections/{provider}/data")
 def delete_provider_data_endpoint(
-    user_id: UUID,
+    user_id: str,
     provider: ProviderName,
     db: DbSession,
     _api_key: ApiKeyDep,

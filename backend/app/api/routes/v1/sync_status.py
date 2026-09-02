@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import logging
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
@@ -47,7 +46,7 @@ _SSE_HEADERS = {
 }
 
 
-def _ensure_user_exists(db: DbSession, user_id: UUID) -> None:
+def _ensure_user_exists(db: DbSession, user_id: str) -> None:
     user = user_service.get(db, user_id)
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
@@ -65,7 +64,7 @@ def _ensure_user_exists(db: DbSession, user_id: UUID) -> None:
     },
 )
 def stream_user_sync_status(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     replay: Annotated[int, Query(ge=1, le=200, description="Replay last N events on connect.")] = 20,
@@ -101,7 +100,7 @@ def stream_user_sync_status(
     status_code=status.HTTP_200_OK,
 )
 def list_recent_sync_events(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
@@ -121,7 +120,7 @@ def list_recent_sync_events(
     status_code=status.HTTP_200_OK,
 )
 def list_sync_run_summaries(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     limit: Annotated[int, Query(ge=1, le=200)] = 20,
@@ -139,7 +138,7 @@ def list_sync_run_summaries(
 def list_all_sync_run_summaries(
     _api_key: ApiKeyDep,
     limit: Annotated[int, Query(ge=1, le=10_000)] = 50,
-    user_id: Annotated[UUID | None, Query(description="Filter by user ID.")] = None,
+    user_id: Annotated[str | None, Query(description="Filter by user ID.")] = None,
     provider: Annotated[str | None, Query(description="Filter by provider name.")] = None,
     status: Annotated[str | None, Query(description="Filter by status.")] = None,
     source: Annotated[str | None, Query(description="Filter by source.")] = None,

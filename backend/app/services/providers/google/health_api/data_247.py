@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, NoReturn
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.config import settings
 from app.constants.google_health_endpoints import LIST_ENDPOINT, RECONCILE_ENDPOINT, ROLLUP_ENDPOINT
@@ -61,7 +61,7 @@ class GoogleHealth247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
         is_first_sync: bool = False,
@@ -123,7 +123,7 @@ class GoogleHealth247Data(Base247DataTemplate):
     def sync_data_type(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         data_type: str,
         start_time: datetime,
         end_time: datetime,
@@ -150,7 +150,7 @@ class GoogleHealth247Data(Base247DataTemplate):
         db.commit()
         return counts
 
-    def _log_metric_failure(self, data_type: str, user_id: UUID, error: Exception) -> None:
+    def _log_metric_failure(self, data_type: str, user_id: str, error: Exception) -> None:
         log_and_capture_error(
             error,
             self.logger,
@@ -163,7 +163,7 @@ class GoogleHealth247Data(Base247DataTemplate):
     def _rollup_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         metric: DataTypeMetric,
         start_time: datetime,
         end_time: datetime,
@@ -198,7 +198,7 @@ class GoogleHealth247Data(Base247DataTemplate):
     def _fetch_rollup_window(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         start_time: datetime,
         end_time: datetime,
@@ -257,7 +257,7 @@ class GoogleHealth247Data(Base247DataTemplate):
     def _native_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         metric: DataTypeMetric,
         start_time: datetime,
         end_time: datetime,
@@ -348,7 +348,7 @@ class GoogleHealth247Data(Base247DataTemplate):
         return f'{member} >= "{low}" AND {member} < "{high}"'
 
     def _fetch_points(
-        self, db: DbSession, user_id: UUID, endpoint: str, time_filter: str | None = None
+        self, db: DbSession, user_id: str, endpoint: str, time_filter: str | None = None
     ) -> list[dict[str, Any]]:
         """GET a native-resolution endpoint (list or reconcile), following pageToken.
 
@@ -390,7 +390,7 @@ class GoogleHealth247Data(Base247DataTemplate):
 
     def _sample(
         self,
-        user_id: UUID,
+        user_id: str,
         recorded_at: datetime,
         value: Any,
         series_type: SeriesType,
@@ -417,32 +417,30 @@ class GoogleHealth247Data(Base247DataTemplate):
     def _unsupported(self, feature: str) -> NoReturn:
         raise NotImplementedError(f"Google Health API 24/7 uses load_and_save_all(); {feature} is not used")
 
-    def get_sleep_data(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> list[dict]:
+    def get_sleep_data(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> list[dict]:
         self._unsupported("get_sleep_data")
 
-    def normalize_sleep(self, raw_sleep: dict[str, Any], user_id: UUID) -> dict[str, Any]:
+    def normalize_sleep(self, raw_sleep: dict[str, Any], user_id: str) -> dict[str, Any]:
         self._unsupported("normalize_sleep")
 
-    def get_recovery_data(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> list[dict]:
+    def get_recovery_data(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> list[dict]:
         self._unsupported("get_recovery_data")
 
-    def normalize_recovery(self, raw_recovery: dict[str, Any], user_id: UUID) -> dict[str, Any]:
+    def normalize_recovery(self, raw_recovery: dict[str, Any], user_id: str) -> dict[str, Any]:
         self._unsupported("normalize_recovery")
 
-    def get_activity_samples(
-        self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime
-    ) -> list[dict]:
+    def get_activity_samples(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> list[dict]:
         self._unsupported("get_activity_samples")
 
     def normalize_activity_samples(
-        self, raw_samples: list[dict[str, Any]], user_id: UUID
+        self, raw_samples: list[dict[str, Any]], user_id: str
     ) -> dict[str, list[dict[str, Any]]]:
         self._unsupported("normalize_activity_samples")
 
     def get_daily_activity_statistics(
-        self, db: DbSession, user_id: UUID, start_date: datetime, end_date: datetime
+        self, db: DbSession, user_id: str, start_date: datetime, end_date: datetime
     ) -> list[dict]:
         self._unsupported("get_daily_activity_statistics")
 
-    def normalize_daily_activity(self, raw_stats: dict[str, Any], user_id: UUID) -> dict[str, Any]:
+    def normalize_daily_activity(self, raw_stats: dict[str, Any], user_id: str) -> dict[str, Any]:
         self._unsupported("normalize_daily_activity")

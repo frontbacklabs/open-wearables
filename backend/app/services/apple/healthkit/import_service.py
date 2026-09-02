@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from logging import Logger, getLogger
 from typing import Iterable, TypedDict
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import sentry_sdk
 from pydantic import ValidationError
@@ -142,7 +142,6 @@ class ImportService:
         Given the parsed SDKSyncRequest, yield tuples of
         (EventRecordCreate, EventRecordDetailCreate) ready to insert into your ORM session.
         """
-        user_uuid = UUID(user_id)
         provider = request.provider
 
         for wjson in request.data.workouts:
@@ -153,7 +152,7 @@ class ImportService:
 
             metrics, time_series_samples, duration = self._extract_metrics_from_workout_stats(
                 wjson.values,
-                user_uuid,
+                user_id,
                 device_model,
                 software_version,
                 wjson.endDate,
@@ -182,7 +181,7 @@ class ImportService:
                 source=original_source_name,
                 software_version=software_version,
                 provider=provider,
-                user_id=user_uuid,
+                user_id=user_id,
             )
 
             detail = EventRecordDetailCreate(
@@ -217,7 +216,6 @@ class ImportService:
         user_id: str,
     ) -> list[HeartRateSampleCreate | StepSampleCreate | TimeSeriesSampleCreate]:
         time_series_samples: list[HeartRateSampleCreate | StepSampleCreate | TimeSeriesSampleCreate] = []
-        user_uuid = UUID(user_id)
         provider = request.provider
 
         for rjson in request.data.records:
@@ -240,7 +238,7 @@ class ImportService:
             sample = TimeSeriesSampleCreate(
                 id=uuid4(),
                 external_id=rjson.id,
-                user_id=user_uuid,
+                user_id=user_id,
                 source=original_source_name,
                 device_model=device_model,
                 software_version=software_version,
@@ -273,7 +271,7 @@ class ImportService:
     def _extract_metrics_from_workout_stats(
         self,
         stats: list[WorkoutStatistic] | None,
-        user_uuid: UUID,
+        user_id: str,
         device_model: str | None,
         software_version: str | None,
         end_date: datetime,
@@ -303,7 +301,7 @@ class ImportService:
                     TimeSeriesSampleCreate(
                         id=uuid4(),
                         external_id=None,
-                        user_id=user_uuid,
+                        user_id=user_id,
                         source=source_name,
                         device_model=device_model,
                         software_version=software_version,
@@ -453,7 +451,7 @@ class ImportService:
             # Load data and get saved counts
             saved_counts = self.load_data(db_session, data, user_id=user_id, batch_id=batch_id)
 
-            connection = self.user_connection_repo.get_by_user_and_provider(db_session, UUID(user_id), provider)
+            connection = self.user_connection_repo.get_by_user_and_provider(db_session, user_id, provider)
             if connection:
                 self.user_connection_repo.update_last_synced_at(db_session, connection)
 

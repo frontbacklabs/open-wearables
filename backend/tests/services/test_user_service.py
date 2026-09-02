@@ -2,7 +2,7 @@
 Tests for UserService.
 
 Tests cover:
-- Creating users with auto-generated ID and timestamp
+- Creating users under a caller-supplied id, with an auto-generated timestamp
 - Updating users with auto-set updated_at
 - Getting users by ID
 - Deleting users
@@ -10,7 +10,6 @@ Tests cover:
 """
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -18,16 +17,18 @@ from sqlalchemy.orm import Session
 
 from app.schemas.model_crud.user_management import UserCreate, UserUpdate
 from app.services.user_service import user_service
-from tests.factories import UserFactory
+from tests.factories import UserFactory, fake_firebase_uid
 
 
 class TestUserServiceCreate:
     """Test user creation with auto-generated fields."""
 
-    def test_create_user_generates_id_and_timestamp(self, db: Session) -> None:
-        """Should create user with auto-generated ID and created_at."""
+    def test_create_user_honours_supplied_id_and_generates_timestamp(self, db: Session) -> None:
+        """Should store the caller's id verbatim and generate created_at."""
         # Arrange
+        user_id = fake_firebase_uid()
         payload = UserCreate(
+            id=user_id,
             email="test@example.com",
             first_name="Test",
             last_name="User",
@@ -37,7 +38,7 @@ class TestUserServiceCreate:
         user = user_service.create(db, payload)
 
         # Assert
-        assert user.id is not None
+        assert user.id == user_id
         assert user.created_at is not None
         assert user.email == "test@example.com"
         assert user.first_name == "Test"
@@ -49,7 +50,7 @@ class TestUserServiceCreate:
     def test_create_user_with_minimal_data(self, db: Session) -> None:
         """Should create user with only email."""
         # Arrange
-        payload = UserCreate(email="minimal@example.com")
+        payload = UserCreate(id=fake_firebase_uid(), email="minimal@example.com")
 
         # Act
         user = user_service.create(db, payload)
@@ -65,6 +66,7 @@ class TestUserServiceCreate:
         """Should create user with external_user_id."""
         # Arrange
         payload = UserCreate(
+            id=fake_firebase_uid(),
             email="external@example.com",
             external_user_id="ext_12345",
         )
@@ -78,7 +80,7 @@ class TestUserServiceCreate:
     def test_create_user_persists_to_database(self, db: Session) -> None:
         """Should persist user to database."""
         # Arrange
-        payload = UserCreate(email="persist@example.com")
+        payload = UserCreate(id=fake_firebase_uid(), email="persist@example.com")
 
         # Act
         user = user_service.create(db, payload)
@@ -93,7 +95,16 @@ class TestUserServiceCreate:
         UserFactory(email="taken@example.com")
 
         with pytest.raises(HTTPException) as exc_info:
-            user_service.create(db, UserCreate(email="taken@example.com"))
+            user_service.create(db, UserCreate(id=fake_firebase_uid(), email="taken@example.com"))
+
+        assert exc_info.value.status_code == 409
+
+    def test_create_user_duplicate_id_returns_409(self, db: Session) -> None:
+        """Should raise 409 on a repeated id: the table mirrors Ren users one-to-one."""
+        existing = UserFactory()
+
+        with pytest.raises(HTTPException) as exc_info:
+            user_service.create(db, UserCreate(id=existing.id, email="other@example.com"))
 
         assert exc_info.value.status_code == 409
 
@@ -136,7 +147,7 @@ class TestUserServiceUpdate:
     def test_update_nonexistent_user_returns_none(self, db: Session) -> None:
         """Should return None when updating non-existent user."""
         # Arrange
-        fake_id = uuid4()
+        fake_id = fake_firebase_uid()
         update_payload = UserUpdate(email="new@example.com")
 
         # Act
@@ -150,7 +161,7 @@ class TestUserServiceUpdate:
         # Arrange
         from fastapi import HTTPException
 
-        fake_id = uuid4()
+        fake_id = fake_firebase_uid()
         update_payload = UserUpdate(email="new@example.com")
 
         # Act & Assert
@@ -179,7 +190,7 @@ class TestUserServiceGet:
     def test_get_nonexistent_user_returns_none(self, db: Session) -> None:
         """Should return None for non-existent user."""
         # Arrange
-        fake_id = uuid4()
+        fake_id = fake_firebase_uid()
 
         # Act
         result = user_service.get(db, fake_id)
@@ -219,7 +230,7 @@ class TestUserServiceDelete:
     def test_delete_nonexistent_user(self, db: Session) -> None:
         """Should handle deleting non-existent user gracefully."""
         # Arrange
-        fake_id = uuid4()
+        fake_id = fake_firebase_uid()
 
         # Act & Assert - should not raise error
         user_service.delete(db, fake_id, raise_404=False)

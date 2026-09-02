@@ -9,6 +9,8 @@ Usage:
 
 from __future__ import annotations
 
+import random
+import string
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -36,6 +38,17 @@ from app.models import (
 from app.schemas.auth import ConnectionStatus
 from app.schemas.enums import HealthScoreCategory, ProviderName
 from app.utils.security import get_password_hash
+
+_FIREBASE_UID_ALPHABET = string.ascii_letters + string.digits
+
+
+def fake_firebase_uid() -> str:
+    """Generate a Firebase-UID-shaped user id: 28 mixed-case alphanumerics.
+
+    Open Wearables user ids mirror Ren's Firebase UIDs, so tests must not stand in a
+    UUID here — a UUID would pass the (Text) column and hide real formatting bugs.
+    """
+    return "".join(random.choices(_FIREBASE_UID_ALPHABET, k=28))
 
 
 class BaseFactory(factory.alchemy.SQLAlchemyModelFactory):
@@ -239,7 +252,8 @@ class UserFactory(BaseFactory):
     class Meta:
         model = User
 
-    id = LazyFunction(uuid4)
+    # Mirrors a Ren Firebase UID rather than a locally minted UUID — see app/models/user.py.
+    id = LazyFunction(fake_firebase_uid)
     created_at = LazyFunction(lambda: datetime.now(timezone.utc))
     email = factory.Faker("email")
     first_name = factory.Faker("first_name")

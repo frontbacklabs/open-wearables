@@ -2,7 +2,6 @@ import logging
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
 
@@ -29,7 +28,7 @@ DEFAULT_HISTORICAL_DAYS = 90
 
 
 def _queue_pull_sync(
-    user_id: UUID,
+    user_id: str,
     provider_value: str,
     start_date: str | None,
     end_date: str | None,
@@ -57,7 +56,7 @@ class SyncDataType(str, Enum):
 @router.post("/{provider}/users/{user_id}/sync")
 def sync_user_data(
     provider: Annotated[ProviderName, Path(description="Data provider")],
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     _api_key: ApiKeyDep,
     # Data type selection
@@ -220,7 +219,7 @@ def sync_user_data(
 
 @router.get("/garmin/users/{user_id}/backfill/status")
 def get_garmin_backfill_status_endpoint(
-    user_id: UUID,
+    user_id: str,
     _api_key: ApiKeyDep,
 ) -> dict[str, Any]:
     """
@@ -259,7 +258,7 @@ def get_garmin_backfill_status_endpoint(
 
 @router.post("/garmin/users/{user_id}/backfill/cancel")
 def cancel_garmin_backfill(
-    user_id: UUID,
+    user_id: str,
     _api_key: ApiKeyDep,
 ) -> dict[str, Any]:
     """
@@ -288,7 +287,7 @@ def cancel_garmin_backfill(
 
 @router.post("/garmin/users/{user_id}/backfill/{type_name}/retry")
 def retry_garmin_backfill_type(
-    user_id: UUID,
+    user_id: str,
     type_name: str,
     _api_key: ApiKeyDep,
 ) -> dict[str, Any]:
@@ -332,7 +331,7 @@ def retry_garmin_backfill_type(
 @router.post("/{provider}/users/{user_id}/sync/historical")
 def sync_historical_data(
     provider: Annotated[ProviderName, Path(description="Data provider")],
-    user_id: UUID,
+    user_id: str,
     _api_key: ApiKeyDep,
     days: Annotated[
         int,

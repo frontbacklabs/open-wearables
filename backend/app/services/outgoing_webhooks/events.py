@@ -61,7 +61,7 @@ def _dispatch(
 def on_workout_created(
     *,
     record_id: UUID,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     device: str | None,
     workout_type: str | None,
@@ -105,7 +105,7 @@ def on_workout_created(
 def on_menstrual_cycle_created(
     *,
     record_id: UUID,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     device: str | None,
     start_time: str,
@@ -143,7 +143,7 @@ def on_menstrual_cycle_created(
 def on_sleep_created(
     *,
     record_id: UUID,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     device: str | None,
     start_time: str,
@@ -178,7 +178,7 @@ def on_sleep_created(
 
 def on_timeseries_batch_saved(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     series_type: str,
     sample_count: int,
@@ -261,7 +261,7 @@ def on_timeseries_batch_saved(
 
 def on_connection_created(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     connection_id: UUID,
     connected_at: str,
@@ -284,7 +284,7 @@ def on_connection_created(
 
 def on_connection_revoked(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     connection_id: UUID,
     reason: str,
@@ -314,7 +314,7 @@ def on_connection_revoked(
 
 def on_sync_started(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     source: str,
     run_id: str,
@@ -341,7 +341,7 @@ def on_sync_started(
 
 def on_sync_completed(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     source: str,
     run_id: str,
@@ -372,7 +372,7 @@ def on_sync_completed(
 
 def on_sync_failed(
     *,
-    user_id: UUID,
+    user_id: str,
     provider: str,
     source: str,
     run_id: str,

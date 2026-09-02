@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Iterable
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.constants.workout_types.whoop import get_unified_workout_type
 from app.database import DbSession
@@ -30,7 +30,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -102,7 +102,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
 
         return all_workouts
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get workouts from Whoop API with specific options."""
         start = kwargs.get("start")
         end = kwargs.get("end")
@@ -128,11 +128,11 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
 
         return self._make_api_request(db, user_id, "/v2/activity/workout", params=params)
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed workout data from Whoop API."""
         return self._make_api_request(db, user_id, f"/v2/activity/workout/{workout_id}")
 
-    def load_single_workout(self, db: DbSession, user_id: UUID, workout_id: str) -> int:
+    def load_single_workout(self, db: DbSession, user_id: str, workout_id: str) -> int:
         """Fetch a single workout by ID, normalize, and save to database. Returns 1 on success."""
         try:
             raw = self.get_workout_detail_from_api(db, user_id, workout_id)
@@ -240,7 +240,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
     def _normalize_strain_health_score(
         self,
         raw_workout: WhoopWorkoutJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> HealthScoreCreate | None:
         """Extract strain health score from a Whoop workout record.
 
@@ -281,7 +281,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: WhoopWorkoutJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate, HealthScoreCreate | None]:  # ty:ignore[invalid-method-override]
         """Normalize Whoop workout to EventRecordCreate, EventRecordDetailCreate, and strain HealthScoreCreate."""
         workout_id = uuid4()
@@ -323,7 +323,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
     def _build_bundles(
         self,
         raw: list[WhoopWorkoutJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         """Build event record payloads for Whoop workouts."""
         for raw_workout in raw:
@@ -335,7 +335,7 @@ class WhoopWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """Load data from Whoop API with pagination."""

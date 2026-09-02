@@ -40,7 +40,14 @@ class UserService(AppService[UserRepository, User, UserCreateInternal, UserUpdat
 
     @handle_exceptions
     def create(self, db_session: DbSession, creator: UserCreate) -> User:
-        """Create a user with server-generated id and created_at."""
+        """Create a user under the caller-supplied id, with server-generated created_at.
+
+        The id comes from the calling system (a Firebase UID for Ren) rather than being
+        minted here, so a repeat of the same id is a conflict, not a second user: the
+        table mirrors the caller's user population one-to-one.
+        """
+        if self.get(db_session, creator.id):
+            raise ResourceAlreadyExistsError(f"User with ID: {creator.id} already exists.")
         if self.crud.get_by_email(db_session, creator.email):
             raise ResourceAlreadyExistsError("User with this email already exists.")
         creation_data = creator.model_dump()

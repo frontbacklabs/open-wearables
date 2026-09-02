@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from typing import Literal
-from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -53,7 +52,7 @@ class UserQueryParams(BaseModel):
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
+    id: str
     created_at: datetime
     first_name: str | None = None
     last_name: str | None = None
@@ -65,6 +64,15 @@ class UserRead(BaseModel):
 
 
 class UserCreate(BaseModel):
+    id: str = Field(
+        min_length=1,
+        max_length=255,
+        description=(
+            "The user's id in the calling system (a Firebase UID for Ren). Required and "
+            "never generated here: the Open Wearables user table is a one-to-one mirror "
+            "of the caller's user table keyed on the same id."
+        ),
+    )
     first_name: str | None = Field(None, max_length=100)
     last_name: str | None = Field(None, max_length=100)
     email: EmailStr | None = None
@@ -72,7 +80,6 @@ class UserCreate(BaseModel):
 
 
 class UserCreateInternal(UserCreate):
-    id: UUID = Field(default_factory=uuid4)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

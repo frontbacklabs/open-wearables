@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from itertools import groupby
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.config import settings
 from app.constants.series_types.oura.sleep_phase import SLEEP_PHASE_MAP
@@ -65,7 +65,7 @@ class Oura247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -87,7 +87,7 @@ class Oura247Data(Base247DataTemplate):
     def _paginate(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any],
     ) -> list[dict[str, Any]]:
@@ -149,7 +149,7 @@ class Oura247Data(Base247DataTemplate):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -163,7 +163,7 @@ class Oura247Data(Base247DataTemplate):
     def _normalize_activity_scores(
         self,
         activity_items: list[OuraDailyActivityJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         """Normalize Oura daily activity scores to HealthScoreCreate."""
         result = []
@@ -202,7 +202,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, list[dict[str, Any]]], list[HealthScoreCreate]]:  # ty:ignore[invalid-method-override]
         """Normalize daily activity data into categorized samples and health scores."""
         activity_items = [OuraDailyActivityJSON(**item) for item in raw_samples]
@@ -266,7 +266,7 @@ class Oura247Data(Base247DataTemplate):
     def save_activity_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized: tuple[dict[str, list[dict[str, Any]]], list[HealthScoreCreate]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -318,7 +318,7 @@ class Oura247Data(Base247DataTemplate):
     def get_cardiovascular_age_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -332,7 +332,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_cardiovascular_age_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[tuple[datetime, float]]:
         """Normalize daily cardiovascular age data into (recorded_at, value) pairs."""
         result: list[tuple[datetime, float]] = []
@@ -355,7 +355,7 @@ class Oura247Data(Base247DataTemplate):
     def save_cardiovascular_age_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized: list[tuple[datetime, float]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -400,7 +400,7 @@ class Oura247Data(Base247DataTemplate):
     def get_readiness_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -414,7 +414,7 @@ class Oura247Data(Base247DataTemplate):
     def _normalize_readiness_scores(
         self,
         readiness: list[OuraDailyReadinessJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         """Normalize Oura readiness data to HealthScoreCreate."""
         scores = []
@@ -453,7 +453,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_readiness(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[list[dict[str, Any]], list[HealthScoreCreate]]:
         """Normalize Oura readiness data to internal schema."""
         readiness_items = [OuraDailyReadinessJSON(**item) for item in raw_items]
@@ -493,7 +493,7 @@ class Oura247Data(Base247DataTemplate):
     def save_readiness_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized: tuple[list[dict[str, Any]], list[HealthScoreCreate]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -551,7 +551,7 @@ class Oura247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -584,7 +584,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_sleeps(
         self,
         raw_sleep: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[dict[str, Any]]:
         """Normalize Oura sleep data to internal schema."""
         result = []
@@ -655,7 +655,7 @@ class Oura247Data(Base247DataTemplate):
     def save_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_items: list[dict[str, Any]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -842,7 +842,7 @@ class Oura247Data(Base247DataTemplate):
     def get_daily_sleep_score_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -856,7 +856,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_daily_sleep_scores(
         self,
         raw_items: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         """Normalize Oura daily sleep scores to HealthScoreCreate."""
         result = []
@@ -897,7 +897,7 @@ class Oura247Data(Base247DataTemplate):
     def save_daily_sleep_scores(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized: list[HealthScoreCreate],
     ) -> int:
         """Save daily sleep scores via health_score_service."""
@@ -913,7 +913,7 @@ class Oura247Data(Base247DataTemplate):
     def get_spo2_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -927,7 +927,7 @@ class Oura247Data(Base247DataTemplate):
     def save_spo2_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_data: list[dict[str, Any]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -1008,7 +1008,7 @@ class Oura247Data(Base247DataTemplate):
     def get_heart_rate_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -1033,7 +1033,7 @@ class Oura247Data(Base247DataTemplate):
     def save_heart_rate_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_data: list[dict[str, Any]],
     ) -> int:
         """Save heart rate samples as DataPointSeries."""
@@ -1079,7 +1079,7 @@ class Oura247Data(Base247DataTemplate):
     def get_personal_info(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Fetch personal info data from Oura API."""
         return self._make_api_request(db, user_id, "/v2/usercollection/personal_info") or {}
@@ -1087,7 +1087,7 @@ class Oura247Data(Base247DataTemplate):
     def normalize_personal_info(
         self,
         raw_info: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize personal info data."""
         try:
@@ -1110,7 +1110,7 @@ class Oura247Data(Base247DataTemplate):
     def save_personal_info(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_data: dict[str, Any],
     ) -> int:
         """Save personal info (weight, height) as DataPointSeries.
@@ -1171,7 +1171,7 @@ class Oura247Data(Base247DataTemplate):
     def get_vo2_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -1185,7 +1185,7 @@ class Oura247Data(Base247DataTemplate):
     def save_vo2_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_data: list[dict[str, Any]],
         log_ctx: LogContext | None = None,
     ) -> int:
@@ -1235,7 +1235,7 @@ class Oura247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,
@@ -1321,19 +1321,19 @@ class Oura247Data(Base247DataTemplate):
     # class assumes. Implemented as no-ops to satisfy ABC instantiation.
     # -------------------------------------------------------------------------
 
-    def normalize_sleep(self, raw_sleep: dict, user_id: UUID) -> dict:
+    def normalize_sleep(self, raw_sleep: dict, user_id: str) -> dict:
         return {}
 
-    def get_recovery_data(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> list[dict]:
+    def get_recovery_data(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> list[dict]:
         return []
 
-    def normalize_recovery(self, raw_recovery: dict, user_id: UUID) -> dict:
+    def normalize_recovery(self, raw_recovery: dict, user_id: str) -> dict:
         return {}
 
     def get_daily_activity_statistics(
-        self, db: DbSession, user_id: UUID, start_date: datetime, end_date: datetime
+        self, db: DbSession, user_id: str, start_date: datetime, end_date: datetime
     ) -> list[dict]:
         return []
 
-    def normalize_daily_activity(self, raw_stats: dict, user_id: UUID) -> dict:
+    def normalize_daily_activity(self, raw_stats: dict, user_id: str) -> dict:
         return {}

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.config import settings
 from app.constants.sleep import SleepStageType
@@ -90,7 +90,7 @@ class Garmin247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
     ) -> Any:
@@ -110,7 +110,7 @@ class Garmin247Data(Base247DataTemplate):
     def _fetch_in_chunks(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         start_time: datetime,
         end_time: datetime,
@@ -167,7 +167,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -207,7 +207,7 @@ class Garmin247Data(Base247DataTemplate):
     def _normalize_sleep_health_score(
         self,
         normalized_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> HealthScoreCreate | None:
         """Extract sleep health score from a normalized Garmin sleep record."""
         sleep_score = normalized_sleep.get("sleep_score")
@@ -239,7 +239,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_sleep(
         self,
         raw_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, Any], HealthScoreCreate | None]:  # ty:ignore[invalid-method-override]
         """Normalize Garmin sleep data to internal schema."""
         start_ts = raw_sleep.get("startTimeInSeconds", 0)
@@ -307,7 +307,7 @@ class Garmin247Data(Base247DataTemplate):
     def _build_nap_record(
         self,
         nap: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
         parent_summary_id: str | None = None,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate] | None:
         """Build EventRecord + EventRecordDetail for a nap entry from a Garmin sleep summary."""
@@ -341,7 +341,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_sleep_record(
         self,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate] | None:
         """Build EventRecord + EventRecordDetail for a sleep session (no DB interaction)."""
@@ -404,7 +404,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
     ) -> None:
         """Save normalized sleep data as EventRecord + EventRecordDetail."""
@@ -432,7 +432,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_dailies_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -442,7 +442,7 @@ class Garmin247Data(Base247DataTemplate):
     def _normalize_dailies_health_scores(
         self,
         normalized_daily: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScoreCreate]:
         """Extract stress and body battery health scores from a normalized Garmin daily."""
         scores: list[HealthScoreCreate] = []
@@ -480,7 +480,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_dailies(
         self,
         raw_daily: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, Any], list[HealthScoreCreate]]:
         """Normalize Garmin daily summary to internal schema."""
         active_seconds = raw_daily.get("activeTimeInSeconds")
@@ -511,7 +511,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_dailies_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         normalized_daily: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from normalized daily data (no DB interaction)."""
@@ -560,7 +560,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_dailies_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_daily: tuple[dict[str, Any], list[HealthScoreCreate]],
     ) -> int:
         """Save daily data to DataPointSeries and health scores.
@@ -579,7 +579,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _collect_heart_rate_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         base_timestamp: int,
         hr_samples: dict[str, int],
         zone_offset: str | None = None,
@@ -628,7 +628,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_epochs_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -638,7 +638,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_epochs(
         self,
         raw_epochs: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize epoch data into categorized samples.
 
@@ -715,7 +715,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_epochs_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         normalized_epochs: dict[str, list[dict[str, Any]]],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from normalized epoch data (no DB interaction)."""
@@ -755,7 +755,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_epochs_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_epochs: dict[str, list[dict[str, Any]]],
     ) -> int:
         """Save epoch samples to DataPointSeries.
@@ -775,7 +775,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_body_composition(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -784,7 +784,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_body_comp_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_body_comp: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from body composition data (no DB interaction)."""
@@ -867,7 +867,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_body_composition(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_body_comp: dict[str, Any],
     ) -> int:
         """Save body composition metrics to DataPointSeries.
@@ -886,7 +886,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_hrv_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_hrv: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from HRV data (no DB interaction)."""
@@ -951,7 +951,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_hrv_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_hrv: dict[str, Any],
     ) -> int:
         """Save HRV (Heart Rate Variability) data to DataPointSeries.
@@ -970,7 +970,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_activity_record(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_activity: dict[str, Any],
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate] | None:
         """Build EventRecord + WorkoutDetail for an activity (no DB interaction)."""
@@ -1033,7 +1033,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_activity_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_activity_details: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build per-second data_point_series rows from activityDetails.samples[].
@@ -1074,7 +1074,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_activity_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_activity: dict[str, Any],
     ) -> int:
         """Save activity data as EventRecord with WorkoutDetails."""
@@ -1098,7 +1098,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _normalize_body_battery_health_score(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_stress: dict[str, Any],
     ) -> HealthScoreCreate | None:
         """Extract peak body battery health score from a stressDetails record."""
@@ -1123,7 +1123,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_stress_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_stress: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build individual stress level and body battery time series samples from a stressDetails record."""
@@ -1186,7 +1186,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_stress_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_stress: dict[str, Any],
     ) -> int:
         """Save individual stress/body battery timeseries
@@ -1206,7 +1206,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_respiration_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_respiration: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from respiration data (no DB interaction)."""
@@ -1263,7 +1263,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_respiration_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_respiration: dict[str, Any],
     ) -> int:
         """Save respiration rate data to DataPointSeries.
@@ -1282,7 +1282,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_pulse_ox_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_pulse_ox: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from pulse ox data (no DB interaction)."""
@@ -1340,7 +1340,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_pulse_ox_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_pulse_ox: dict[str, Any],
     ) -> int:
         """Save SpO2 (blood oxygen saturation) data to DataPointSeries.
@@ -1359,7 +1359,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_blood_pressure_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_bp: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from blood pressure data (no DB interaction)."""
@@ -1420,7 +1420,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_blood_pressure_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_bp: dict[str, Any],
     ) -> int:
         """Save blood pressure data to DataPointSeries.
@@ -1439,7 +1439,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_user_metrics_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_metrics: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from user metrics data (no DB interaction)."""
@@ -1490,7 +1490,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_user_metrics_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_metrics: dict[str, Any],
     ) -> int:
         """Save user metrics (VO2max, fitness age) to DataPointSeries.
@@ -1509,7 +1509,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_skin_temp_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_skin_temp: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from skin temperature data (no DB interaction)."""
@@ -1543,7 +1543,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_skin_temp_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_skin_temp: dict[str, Any],
     ) -> int:
         """Save skin temperature data to DataPointSeries.
@@ -1562,7 +1562,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_health_snapshot_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_snapshot: dict[str, Any],
     ) -> list[TimeSeriesSampleCreate]:
         """Build time series samples from health snapshot data (no DB interaction)."""
@@ -1675,7 +1675,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_health_snapshot_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_snapshot: dict[str, Any],
     ) -> int:
         """Save health snapshot data to DataPointSeries.
@@ -1694,7 +1694,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_moveiq_record(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_moveiq: dict[str, Any],
     ) -> EventRecordCreate | None:
         """Build EventRecord for a Move IQ activity (no DB interaction)."""
@@ -1729,7 +1729,7 @@ class Garmin247Data(Base247DataTemplate):
     def save_moveiq_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         raw_moveiq: dict[str, Any],
     ) -> int:
         """Save Move IQ auto-detected activities as EventRecords."""
@@ -1750,7 +1750,7 @@ class Garmin247Data(Base247DataTemplate):
 
     def _build_mct_record(
         self,
-        user_id: UUID,
+        user_id: str,
         raw_mct: dict[str, Any],
     ) -> tuple[EventRecordCreate, MenstrualCycleDetailCreate] | None:
         """Build EventRecord + MenstrualCycleDetailCreate for a cycle summary (no DB interaction)."""
@@ -1807,7 +1807,7 @@ class Garmin247Data(Base247DataTemplate):
     def _save_fit_workout_fields(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         activity_id: str,
         segments: list[dict],
         hr_zones: dict | None = None,
@@ -1845,7 +1845,7 @@ class Garmin247Data(Base247DataTemplate):
     def process_items_batch(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         summary_type: str,
         items: list[dict[str, Any]],
     ) -> int:
@@ -2100,7 +2100,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -2113,7 +2113,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Garmin doesn't have dedicated recovery data."""
         return {}
@@ -2121,7 +2121,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -2131,7 +2131,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Delegate to normalize_epochs."""
         return self.normalize_epochs(raw_samples, user_id)
@@ -2139,7 +2139,7 @@ class Garmin247Data(Base247DataTemplate):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -2149,7 +2149,7 @@ class Garmin247Data(Base247DataTemplate):
     def normalize_daily_activity(
         self,
         raw_stats: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[dict[str, Any], list[HealthScoreCreate]]:  # ty:ignore[invalid-method-override]
         """Delegate to normalize_dailies."""
         return self.normalize_dailies(raw_stats, user_id)
@@ -2161,7 +2161,7 @@ class Garmin247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,

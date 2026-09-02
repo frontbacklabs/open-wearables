@@ -15,7 +15,7 @@ from app.services.user_invitation_code_service import (
     CODE_LENGTH,
     user_invitation_code_service,
 )
-from tests.factories import DeveloperFactory, UserFactory
+from tests.factories import DeveloperFactory, UserFactory, fake_firebase_uid
 
 
 class TestGenerate:
@@ -68,7 +68,7 @@ class TestGenerate:
 
         # Act & Assert
         with pytest.raises(HTTPException):
-            user_invitation_code_service.generate(db, uuid4(), developer.id)
+            user_invitation_code_service.generate(db, fake_firebase_uid(), developer.id)
 
     def test_generate_revokes_previous_active_codes(self, db: Session) -> None:
         # Arrange

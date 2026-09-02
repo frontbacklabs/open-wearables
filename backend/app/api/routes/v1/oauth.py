@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -45,7 +44,7 @@ def get_oauth_strategy(provider: ProviderName) -> BaseProviderStrategy:
 )
 def authorize_provider(
     provider: ProviderName,
-    user_id: Annotated[UUID, Query(description="User ID to connect")],
+    user_id: Annotated[str, Query(description="User ID to connect")],
     redirect_uri: Annotated[str | None, Query(description="Optional redirect URI after authorization")] = None,
 ):
     """

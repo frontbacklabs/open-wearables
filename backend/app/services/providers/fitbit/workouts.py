@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.constants.workout_types.fitbit import get_unified_workout_type
 from app.database import DbSession
@@ -63,7 +63,7 @@ class FitbitWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Fitbit activity to EventRecordCreate + EventRecordDetailCreate."""
         workout_id = uuid4()
@@ -105,7 +105,7 @@ class FitbitWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -148,7 +148,7 @@ class FitbitWorkouts(BaseWorkoutsTemplate):
             return value
         return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Fetch workouts from Fitbit API with optional date range."""
         start_date = self._coerce_to_datetime(kwargs.get("start_date"), datetime.now(timezone.utc) - timedelta(days=30))
         end_date = self._coerce_to_datetime(kwargs.get("end_date"), datetime.now(timezone.utc))
@@ -157,7 +157,7 @@ class FitbitWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> bool:
         """Fetch activities since start_date and save to database."""

@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from faker import Faker
 
@@ -37,7 +37,7 @@ def _generate_time_series_samples(
     enabled_types: set[SeriesType],
     fake: Faker,
     *,
-    user_id: UUID,
+    user_id: str,
     source: str,
     device_model: str | None = None,
     provider: str | None = None,
@@ -85,7 +85,7 @@ def _generate_time_series_samples(
 
 
 def _generate_user_connections(
-    user_id: UUID,
+    user_id: str,
     fake: Faker,
     now: datetime,
     num_connections: int = 2,

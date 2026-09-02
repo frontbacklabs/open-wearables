@@ -34,7 +34,7 @@ import json
 import logging
 import time
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from celery import current_app as celery_app
 from fastapi import HTTPException, Request
@@ -174,7 +174,7 @@ class StravaWebhookHandler(BaseWebhookHandler):
     def supported_event_types(self) -> list[str]:
         return ["activity_create", "activity_update", "activity_delete", "athlete_delete"]
 
-    def _handle_activity_delete(self, db: DbSession, user_id: UUID, activity_id: int, trace_id: str) -> dict[str, Any]:
+    def _handle_activity_delete(self, db: DbSession, user_id: str, activity_id: int, trace_id: str) -> dict[str, Any]:
         deleted = event_record_service.crud.delete_by_external_id(db, user_id, str(activity_id), provider="strava")
         log_structured(
             logger,
@@ -269,7 +269,7 @@ class StravaWebhookHandler(BaseWebhookHandler):
             )
             return {"status": "user_not_found", "strava_athlete_id": owner_id}
 
-        user_id: UUID = connection.user_id
+        user_id: str = connection.user_id
 
         self.connection_repo.update_last_synced_at(db, connection)
 

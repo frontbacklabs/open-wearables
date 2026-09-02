@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Iterable
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.constants.workout_types.oura import get_unified_workout_type
 from app.database import DbSession
@@ -26,7 +26,7 @@ class OuraWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -89,7 +89,7 @@ class OuraWorkouts(BaseWorkoutsTemplate):
 
         return all_workouts
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get workouts from Oura API with specific options."""
         params: dict[str, Any] = {}
         if kwargs.get("start_date"):
@@ -101,11 +101,11 @@ class OuraWorkouts(BaseWorkoutsTemplate):
 
         return self._make_api_request(db, user_id, "/v2/usercollection/workout", params=params)
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed workout data from Oura API."""
         return self._make_api_request(db, user_id, f"/v2/usercollection/workout/{workout_id}")
 
-    def save_by_id(self, db: DbSession, user_id: UUID, workout_id: str, trace_id: str | None = None) -> int:
+    def save_by_id(self, db: DbSession, user_id: str, workout_id: str, trace_id: str | None = None) -> int:
         """Fetch a single workout by ID and save it."""
         raw = self.get_workout_detail_from_api(db, user_id, workout_id)
         if not raw or not isinstance(raw, dict):
@@ -157,7 +157,7 @@ class OuraWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: OuraWorkoutJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Oura workout to EventRecordCreate and EventRecordDetailCreate."""
         workout_id = uuid4()
@@ -202,7 +202,7 @@ class OuraWorkouts(BaseWorkoutsTemplate):
     def _build_bundles(
         self,
         raw: list[OuraWorkoutJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         """Build event record payloads for Oura workouts."""
         for raw_workout in raw:
@@ -212,7 +212,7 @@ class OuraWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """Load data from Oura API with pagination.

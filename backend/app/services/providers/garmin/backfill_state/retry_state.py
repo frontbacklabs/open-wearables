@@ -3,7 +3,6 @@
 import json
 import logging
 from typing import Any
-from uuid import UUID
 
 from app.integrations.redis_client import get_redis_client
 from app.services.providers.garmin.backfill_config import REDIS_TTL
@@ -13,7 +12,7 @@ from app.utils.structured_logging import log_structured
 logger = logging.getLogger(__name__)
 
 
-def record_timed_out_entry(user_id: str | UUID, data_type: str, window_idx: int) -> None:
+def record_timed_out_entry(user_id: str, data_type: str, window_idx: int) -> None:
     """Append a timed-out entry to the JSON list used by Phase-3 retry."""
     uid = str(user_id)
     key = _get_key(uid, "timed_out_types")
@@ -23,7 +22,7 @@ def record_timed_out_entry(user_id: str | UUID, data_type: str, window_idx: int)
     get_redis_client().setex(key, REDIS_TTL, json.dumps(entries))
 
 
-def get_retry_targets(user_id: str | UUID) -> list[dict[str, Any]]:
+def get_retry_targets(user_id: str) -> list[dict[str, Any]]:
     """Return deduplicated retry targets, keeping the latest window per type."""
     uid = str(user_id)
     raw = get_redis_client().get(_get_key(uid, "timed_out_types"))
@@ -40,12 +39,12 @@ def get_retry_targets(user_id: str | UUID) -> list[dict[str, Any]]:
     return [{"type": dtype, "window": window} for dtype, window in latest.items()]
 
 
-def is_retry_phase(user_id: str | UUID) -> bool:
+def is_retry_phase(user_id: str) -> bool:
     """Return True if the backfill is currently in the retry phase."""
     return get_redis_client().get(_get_key(str(user_id), "retry_phase")) == "1"
 
 
-def enter_retry_phase(user_id: str | UUID, retry_entries: list[dict[str, Any]]) -> None:
+def enter_retry_phase(user_id: str, retry_entries: list[dict[str, Any]]) -> None:
     """Enter retry phase with the given retry targets."""
     uid = str(user_id)
     get_redis_client().setex(_get_key(uid, "retry_phase"), REDIS_TTL, "1")
@@ -61,7 +60,7 @@ def enter_retry_phase(user_id: str | UUID, retry_entries: list[dict[str, Any]]) 
     )
 
 
-def get_next_retry_target(user_id: str | UUID) -> dict[str, Any] | None:
+def get_next_retry_target(user_id: str) -> dict[str, Any] | None:
     """Pop and return the next retry target, or None if the queue is empty."""
     uid = str(user_id)
     key = _get_key(uid, "retry_targets")
@@ -76,13 +75,13 @@ def get_next_retry_target(user_id: str | UUID) -> dict[str, Any] | None:
     return entry
 
 
-def setup_retry_window(user_id: str | UUID, window_idx: int) -> None:
+def setup_retry_window(user_id: str, window_idx: int) -> None:
     """Set the current retry window index in Redis."""
     uid = str(user_id)
     get_redis_client().setex(_get_key(uid, "retry_current_window"), REDIS_TTL, str(window_idx))
 
 
-def clear_retry_state(user_id: str | UUID) -> None:
+def clear_retry_state(user_id: str) -> None:
     """Delete all retry-phase Redis keys."""
     uid = str(user_id)
     for suffix in ["retry_phase", "retry_targets", "retry_current_window", "retry_current_type"]:

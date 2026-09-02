@@ -8,6 +8,7 @@ import pytest
 from app.schemas.enums import HealthScoreCategory, SeriesType
 from app.services.providers.polar.data_247 import Polar247Data
 from app.services.providers.polar.strategy import PolarStrategy
+from tests.factories import fake_firebase_uid
 
 
 @pytest.fixture
@@ -43,7 +44,7 @@ class TestPolar247SleepNormalization:
         }
 
     def test_basic_fields(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record, detail, score, hr = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert record.user_id == user_id
@@ -52,7 +53,7 @@ class TestPolar247SleepNormalization:
         assert record.device_model is None
 
     def test_timestamps(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record, _, _, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert record.start_datetime.isoformat() == "2024-01-14T23:00:00+02:00"
@@ -60,7 +61,7 @@ class TestPolar247SleepNormalization:
         assert record.duration_seconds == 8 * 3600
 
     def test_sleep_stage_minutes(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, detail, _, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert detail.sleep_deep_minutes == 90
@@ -70,14 +71,14 @@ class TestPolar247SleepNormalization:
         assert detail.sleep_time_in_bed_minutes == 8 * 60
 
     def test_sleep_total_duration_excludes_awake(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, detail, _, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         # total = (light + deep + rem) / 60
         assert detail.sleep_total_duration_minutes == (14400 + 5400 + 7200) // 60
 
     def test_sleep_score(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, _, score, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert score is not None
@@ -89,12 +90,12 @@ class TestPolar247SleepNormalization:
 
     def test_no_score_when_missing(self, data_247: Polar247Data, sample_sleep: dict) -> None:
         sample_sleep.pop("sleep_score")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, _, score, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
         assert score is None
 
     def test_hr_timeseries(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, _, _, hr_samples = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert len(hr_samples) == 3
@@ -104,7 +105,7 @@ class TestPolar247SleepNormalization:
         assert bpm_values == {58, 54, 52}
 
     def test_hypnogram_produces_stages(self, data_247: Polar247Data, sample_sleep: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         _, detail, _, _ = data_247.normalize_sleep([sample_sleep], user_id)[0]
 
         assert detail.sleep_stages is not None
@@ -114,12 +115,12 @@ class TestPolar247SleepNormalization:
 
     def test_missing_start_time_skipped(self, data_247: Polar247Data, sample_sleep: dict) -> None:
         sample_sleep.pop("sleep_start_time")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_sleep([sample_sleep], user_id) == []
 
     def test_missing_end_time_skipped(self, data_247: Polar247Data, sample_sleep: dict) -> None:
         sample_sleep.pop("sleep_end_time")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_sleep([sample_sleep], user_id) == []
 
     def test_empty_input(self, data_247: Polar247Data) -> None:
@@ -144,7 +145,7 @@ class TestPolar247DailyActivityNormalization:
         }
 
     def test_all_three_series_types(self, data_247: Polar247Data, sample_activity: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_daily_activity([sample_activity], user_id)
 
         types = {s.series_type for s in samples}
@@ -153,33 +154,33 @@ class TestPolar247DailyActivityNormalization:
         assert SeriesType.distance_walking_running in types
 
     def test_steps_value(self, data_247: Polar247Data, sample_activity: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_daily_activity([sample_activity], user_id)
         step_sample = next(s for s in samples if s.series_type == SeriesType.steps)
         assert step_sample.value == 9500
         assert step_sample.user_id == user_id
 
     def test_energy_value(self, data_247: Polar247Data, sample_activity: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_daily_activity([sample_activity], user_id)
         energy_sample = next(s for s in samples if s.series_type == SeriesType.energy)
         assert energy_sample.value == 420
 
     def test_distance_value(self, data_247: Polar247Data, sample_activity: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_daily_activity([sample_activity], user_id)
         dist_sample = next(s for s in samples if s.series_type == SeriesType.distance_walking_running)
         assert dist_sample.value == 7200
 
     def test_missing_steps_no_sample(self, data_247: Polar247Data, sample_activity: dict) -> None:
         sample_activity.pop("steps")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_daily_activity([sample_activity], user_id)
         assert not any(s.series_type == SeriesType.steps for s in samples)
 
     def test_missing_start_time_skipped(self, data_247: Polar247Data, sample_activity: dict) -> None:
         sample_activity.pop("start_time")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_daily_activity([sample_activity], user_id) == []
 
     def test_empty_input(self, data_247: Polar247Data) -> None:
@@ -205,7 +206,7 @@ class TestPolar247ContinuousHRNormalization:
         }
 
     def test_produces_hr_timeseries(self, data_247: Polar247Data, sample_chr: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_continuous_hr([sample_chr], user_id)
 
         assert len(samples) == 3
@@ -213,13 +214,13 @@ class TestPolar247ContinuousHRNormalization:
         assert all(s.user_id == user_id for s in samples)
 
     def test_bpm_values(self, data_247: Polar247Data, sample_chr: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_continuous_hr([sample_chr], user_id)
         bpm_values = [s.value for s in samples]
         assert bpm_values == [62, 65, 60]
 
     def test_timestamps_use_date_as_anchor(self, data_247: Polar247Data, sample_chr: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = data_247.normalize_continuous_hr([sample_chr], user_id)
         assert samples[0].recorded_at.date().isoformat() == "2024-01-15"
         assert samples[0].recorded_at.hour == 8
@@ -227,7 +228,7 @@ class TestPolar247ContinuousHRNormalization:
 
     def test_missing_samples_skipped(self, data_247: Polar247Data, sample_chr: dict) -> None:
         sample_chr["heart_rate_samples"] = []
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_continuous_hr([sample_chr], user_id) == []
 
     def test_empty_input(self, data_247: Polar247Data) -> None:
@@ -259,7 +260,7 @@ class TestPolar247CardioLoadNormalization:
         }
 
     def test_produces_strain_score(self, data_247: Polar247Data, sample_cardio_load: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         scores = data_247.normalize_cardio_load([sample_cardio_load], user_id)
 
         assert len(scores) == 1
@@ -270,7 +271,7 @@ class TestPolar247CardioLoadNormalization:
         assert score.user_id == user_id
 
     def test_components(self, data_247: Polar247Data, sample_cardio_load: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         score = data_247.normalize_cardio_load([sample_cardio_load], user_id)[0]
 
         assert "strain" in score.components
@@ -281,12 +282,12 @@ class TestPolar247CardioLoadNormalization:
 
     def test_not_available_status_skipped(self, data_247: Polar247Data, sample_cardio_load: dict) -> None:
         sample_cardio_load["cardio_load_status"] = "LOAD_STATUS_NOT_AVAILABLE"
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_cardio_load([sample_cardio_load], user_id) == []
 
     def test_missing_cardio_load_value_skipped(self, data_247: Polar247Data, sample_cardio_load: dict) -> None:
         sample_cardio_load.pop("cardio_load")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_cardio_load([sample_cardio_load], user_id) == []
 
     def test_empty_input(self, data_247: Polar247Data) -> None:
@@ -313,7 +314,7 @@ class TestPolar247NightlyRechargeNormalization:
         }
 
     def test_produces_recovery_score(self, data_247: Polar247Data, sample_recharge: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         scores = data_247.normalize_nightly_recharge([sample_recharge], user_id)
 
         assert len(scores) == 1
@@ -324,7 +325,7 @@ class TestPolar247NightlyRechargeNormalization:
         assert score.user_id == user_id
 
     def test_components_include_hrv(self, data_247: Polar247Data, sample_recharge: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         score = data_247.normalize_nightly_recharge([sample_recharge], user_id)[0]
 
         assert "heart_rate_variability_avg" in score.components
@@ -333,14 +334,14 @@ class TestPolar247NightlyRechargeNormalization:
         assert "heart_rate_avg" in score.components
 
     def test_ans_charge_status_qualifier(self, data_247: Polar247Data, sample_recharge: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         score = data_247.normalize_nightly_recharge([sample_recharge], user_id)[0]
 
         assert "ans_charge_status" in score.components
         assert score.components["ans_charge_status"].qualifier == "usual"
 
     def test_status_labels(self, data_247: Polar247Data, sample_recharge: dict) -> None:
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         for status, label in [(1, "very poor"), (2, "poor"), (3, "compromised"), (4, "ok"), (6, "very good")]:
             sample_recharge["nightly_recharge_status"] = status
             score = data_247.normalize_nightly_recharge([sample_recharge], user_id)[0]
@@ -348,7 +349,7 @@ class TestPolar247NightlyRechargeNormalization:
 
     def test_missing_status_skipped(self, data_247: Polar247Data, sample_recharge: dict) -> None:
         sample_recharge.pop("nightly_recharge_status")
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert data_247.normalize_nightly_recharge([sample_recharge], user_id) == []
 
     def test_empty_input(self, data_247: Polar247Data) -> None:

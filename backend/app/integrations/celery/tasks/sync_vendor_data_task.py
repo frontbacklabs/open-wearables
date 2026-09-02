@@ -65,7 +65,7 @@ def sync_vendor_data(
     Synchronize workout/exercise/activity data from all providers the user is connected to.
 
     Args:
-        user_id: UUID of the user to sync data for
+        user_id: str of the user to sync data for
         start_date: ISO 8601 date string for start of sync period.
             When None, defaults to connection.last_synced_at (or now for first-ever sync)
             so that live syncs never re-pull history.
@@ -85,38 +85,24 @@ def sync_vendor_data(
     trace_id = str(uuid4())[:8]
     trace_id_var.set(trace_id)
 
-    try:
-        user_uuid = UUID(user_id)
-    except ValueError as e:
-        log_structured(
-            logger,
-            "error",
-            f"Invalid user_id format: {user_id}",
-            task="sync_vendor_data",
-            user_id=user_id,
-        )
-        log_and_capture_error(
-            e,
-            logger,
-            f"Invalid user_id format: {user_id}",
-            extra={"user_id": user_id, "task": "sync_vendor_data", "trace_id": trace_id},
-        )
+    if not user_id:
+        log_structured(logger, "error", "Missing user_id", task="sync_vendor_data")
         return SyncVendorDataResult(
             user_id=user_id,
             start_date=start_date,
             end_date=end_date,
-            errors={"user_id": f"Invalid UUID format: {str(e)}"},
+            errors={"user_id": "user_id must not be empty"},
         ).model_dump()
 
     result = SyncVendorDataResult(
-        user_id=user_uuid,
+        user_id=user_id,
         start_date=start_date,
         end_date=end_date,
     )
 
     with SessionLocal() as db:
         try:
-            connections = user_connection_repo.get_all_active_by_user(db, user_uuid)
+            connections = user_connection_repo.get_all_active_by_user(db, user_id)
 
             if providers:
                 connections = [c for c in connections if c.provider in providers]
@@ -187,7 +173,7 @@ def sync_vendor_data(
                 shared_token: str = ""
                 if connection.provider_user_id and not _skip_linked_fan_out:
                     is_pull_primary, shared_token, existing_primary = try_become_primary(
-                        provider_name, connection.provider_user_id, user_uuid, scope="pull"
+                        provider_name, connection.provider_user_id, user_id, scope="pull"
                     )
                     if not is_pull_primary and existing_primary:
                         # If the lock holder no longer has an active connection (e.g. user
@@ -206,7 +192,7 @@ def sync_vendor_data(
                             )
                             release_stale_primary(provider_name, connection.provider_user_id, scope="pull")
                             is_pull_primary, shared_token, existing_primary = try_become_primary(
-                                provider_name, connection.provider_user_id, user_uuid, scope="pull"
+                                provider_name, connection.provider_user_id, user_id, scope="pull"
                             )
 
                     if not is_pull_primary:
@@ -232,7 +218,7 @@ def sync_vendor_data(
 
                 _emit_sync_status(
                     started,
-                    user_uuid,
+                    user_id,
                     provider_name,
                     sync_source,
                     run_id=run_id,
@@ -288,7 +274,7 @@ def sync_vendor_data(
                         params = build_sync_params(effective_start, end_date)
                         _emit_sync_status(
                             progress,
-                            user_uuid,
+                            user_id,
                             provider_name,
                             sync_source,
                             run_id=run_id,
@@ -296,7 +282,7 @@ def sync_vendor_data(
                             message=f"Fetching workouts from {provider_name}",
                         )
                         try:
-                            success = strategy.workouts.load_data(db, user_uuid, **params)
+                            success = strategy.workouts.load_data(db, user_id, **params)
                             provider_result.params["workouts"] = {"success": success, **params}
                         except Exception as e:
                             log_structured(
@@ -334,7 +320,7 @@ def sync_vendor_data(
 
                         _emit_sync_status(
                             progress,
-                            user_uuid,
+                            user_id,
                             provider_name,
                             sync_source,
                             run_id=run_id,
@@ -349,7 +335,7 @@ def sync_vendor_data(
                             if hasattr(provider_any, "load_and_save_all"):
                                 results_247 = provider_any.load_and_save_all(
                                     db,
-                                    user_uuid,
+                                    user_id,
                                     start_time=start_dt,
                                     end_time=end_dt,
                                     is_first_sync=is_first_sync,
@@ -361,7 +347,7 @@ def sync_vendor_data(
                             else:
                                 results_247 = strategy.data_247.load_all_247_data(
                                     db,
-                                    user_uuid,
+                                    user_id,
                                     start_time=start_dt,
                                     end_time=end_dt,
                                 )
@@ -400,16 +386,14 @@ def sync_vendor_data(
                         user_connection_repo.update_last_synced_at(db, connection)
 
                     if shared_token and connection.provider_user_id:
-                        release_primary(
-                            provider_name, connection.provider_user_id, user_uuid, shared_token, scope="pull"
-                        )
+                        release_primary(provider_name, connection.provider_user_id, user_id, shared_token, scope="pull")
                         # Fan-out: trigger sync for every other OW profile sharing this
                         # provider account so they receive the same data.
                         linked_connections = user_connection_repo.get_all_by_provider_user_id(
                             db, provider_name, connection.provider_user_id
                         )
                         for linked_conn in linked_connections:
-                            if linked_conn.user_id == user_uuid:
+                            if linked_conn.user_id == user_id:
                                 continue
                             log_structured(
                                 logger,
@@ -459,7 +443,7 @@ def sync_vendor_data(
                     if final_status == SyncStatus.FAILED:
                         _emit_sync_status(
                             failed,
-                            user_uuid,
+                            user_id,
                             provider_name,
                             sync_source,
                             run_id=run_id,
@@ -491,7 +475,7 @@ def sync_vendor_data(
                             completed_message += f" · lookback {lookback_label}"
                         _emit_sync_status(
                             completed,
-                            user_uuid,
+                            user_id,
                             provider_name,
                             sync_source,
                             run_id=run_id,
@@ -504,12 +488,10 @@ def sync_vendor_data(
 
                 except Exception as e:
                     if shared_token and connection.provider_user_id:
-                        release_primary(
-                            provider_name, connection.provider_user_id, user_uuid, shared_token, scope="pull"
-                        )
+                        release_primary(provider_name, connection.provider_user_id, user_id, shared_token, scope="pull")
                     _emit_sync_status(
                         failed,
-                        user_uuid,
+                        user_id,
                         provider_name,
                         sync_source,
                         run_id=run_id,

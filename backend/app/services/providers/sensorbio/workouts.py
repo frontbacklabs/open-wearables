@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Iterable
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from app.constants.workout_types.sensorbio import get_unified_workout_type
 from app.database import DbSession
@@ -42,7 +42,7 @@ class SensorBioWorkouts(BaseWorkoutsTemplate):
     def _make_api_request(  # type: ignore[override]
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         method: str = "GET",
         params: dict[str, Any] | None = None,
@@ -86,7 +86,7 @@ class SensorBioWorkouts(BaseWorkoutsTemplate):
         """Convert Unix epoch milliseconds to UTC datetime."""
         return datetime.fromtimestamp(timestamp / 1000, tz=timezone.utc) if timestamp is not None else None
 
-    def get_workouts(self, db: DbSession, user_id: UUID, start_date: datetime, end_date: datetime) -> list[Any]:
+    def get_workouts(self, db: DbSession, user_id: str, start_date: datetime, end_date: datetime) -> list[Any]:
         """Fetch and flatten Activity records from /v1/activities within the date window.
 
         The API returns pages of WorkoutStats, each containing a nested
@@ -151,14 +151,14 @@ class SensorBioWorkouts(BaseWorkoutsTemplate):
                 raise
         return all_workouts
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         limit = min(int(kwargs.get("limit", 50)), 50)
         last_timestamp = int(kwargs.get("last-timestamp", kwargs.get("last_timestamp", 0)))
         return self._make_api_request(
             db, user_id, "/v1/activities", params={"last-timestamp": last_timestamp, "limit": limit}
         )
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         raise NotImplementedError("Sensor Bio does not support API-based workout detail fetching")
 
     def _extract_dates(
@@ -190,7 +190,7 @@ class SensorBioWorkouts(BaseWorkoutsTemplate):
         return metrics
 
     def _normalize_workout(
-        self, raw_workout: dict[str, Any], user_id: UUID
+        self, raw_workout: dict[str, Any], user_id: str
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         workout_id = uuid4()
         # Per spec, Activity.likely_name is the type field; no raw "type" field.
@@ -216,12 +216,12 @@ class SensorBioWorkouts(BaseWorkoutsTemplate):
         return workout_create, workout_detail_create
 
     def _build_bundles(
-        self, raw: list[dict[str, Any]], user_id: UUID
+        self, raw: list[dict[str, Any]], user_id: str
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         for raw_workout in raw:
             yield self._normalize_workout(raw_workout, user_id)
 
-    def load_data(self, db: DbSession, user_id: UUID, **kwargs: Any) -> int:
+    def load_data(self, db: DbSession, user_id: str, **kwargs: Any) -> int:
         start = kwargs.get("start") or kwargs.get("start_date")
         end = kwargs.get("end") or kwargs.get("end_date")
         if not start:

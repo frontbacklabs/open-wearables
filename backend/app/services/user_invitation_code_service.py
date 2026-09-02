@@ -34,7 +34,7 @@ class UserInvitationCodeService:
     def generate(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         developer_id: UUID,
     ) -> UserInvitationCodeRead:
         """Generate a new invitation code for a user."""

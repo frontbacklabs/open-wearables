@@ -4,7 +4,6 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from app.database import DbSession
 from app.services.providers.templates.base_oauth import BaseOAuthTemplate
@@ -38,7 +37,7 @@ class Base247DataTemplate(ABC):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -49,7 +48,7 @@ class Base247DataTemplate(ABC):
     def normalize_sleep(
         self,
         raw_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize provider-specific sleep data to our schema."""
         pass
@@ -57,7 +56,7 @@ class Base247DataTemplate(ABC):
     def process_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -73,7 +72,7 @@ class Base247DataTemplate(ABC):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -84,7 +83,7 @@ class Base247DataTemplate(ABC):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize provider-specific recovery data to our schema."""
         pass
@@ -92,7 +91,7 @@ class Base247DataTemplate(ABC):
     def process_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -108,7 +107,7 @@ class Base247DataTemplate(ABC):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -119,7 +118,7 @@ class Base247DataTemplate(ABC):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize activity samples into categorized data.
 
@@ -130,7 +129,7 @@ class Base247DataTemplate(ABC):
     def process_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> dict[str, list[dict[str, Any]]]:
@@ -146,7 +145,7 @@ class Base247DataTemplate(ABC):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -157,7 +156,7 @@ class Base247DataTemplate(ABC):
     def normalize_daily_activity(
         self,
         raw_stats: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize daily activity statistics to our schema."""
         pass
@@ -165,7 +164,7 @@ class Base247DataTemplate(ABC):
     def process_daily_activity(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -180,7 +179,7 @@ class Base247DataTemplate(ABC):
     def load_all_247_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> dict[str, Any]:
@@ -199,7 +198,7 @@ class Base247DataTemplate(ABC):
     def get_raw_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> Any:
@@ -209,7 +208,7 @@ class Base247DataTemplate(ABC):
     def get_raw_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> Any:
@@ -219,7 +218,7 @@ class Base247DataTemplate(ABC):
     def get_raw_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> Any:

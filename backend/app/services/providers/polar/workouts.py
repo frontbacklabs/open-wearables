@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Iterable
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import isodate
 
@@ -24,14 +24,14 @@ class PolarWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
         """Get exercises from Polar API."""
         return self._make_api_request(db, user_id, "/v3/exercises")
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get exercises from Polar API with options."""
         samples = kwargs.get("samples", False)
         zones = kwargs.get("zones", False)
@@ -44,7 +44,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
         }
         return self._make_api_request(db, user_id, "/v3/exercises", params=params)
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed exercise data from Polar API."""
         samples = kwargs.get("samples", False)
         zones = kwargs.get("zones", False)
@@ -99,7 +99,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: PolarExerciseJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Polar exercise to EventRecordCreate and EventRecordDetailCreate."""
         workout_id = uuid4()
@@ -143,7 +143,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
     def _build_bundles(
         self,
         raw: list[PolarExerciseJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         """Build event record payloads for Polar exercises."""
         for raw_workout in raw:
@@ -152,7 +152,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """Load data from Polar API."""
@@ -168,7 +168,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
 
         return count
 
-    def fetch_and_save_exercise(self, db: DbSession, user_id: UUID, path: str) -> int:
+    def fetch_and_save_exercise(self, db: DbSession, user_id: str, path: str) -> int:
         """Fetch a single exercise by URL path and save it. Used by webhook handler."""
         raw = self._make_api_request(db, user_id, path)
         if not raw:
@@ -183,7 +183,7 @@ class PolarWorkouts(BaseWorkoutsTemplate):
     def get_exercise_detail(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         exercise_id: str,
         samples: bool = False,
         zones: bool = False,

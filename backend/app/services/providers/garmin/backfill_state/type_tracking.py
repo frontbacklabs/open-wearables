@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
 
 from app.integrations.redis_client import get_redis_client
 from app.services.providers.garmin.backfill_config import (
@@ -15,7 +14,7 @@ from app.utils.structured_logging import log_structured
 logger = logging.getLogger(__name__)
 
 
-def get_pending_types(user_id: str | UUID) -> list[str]:
+def get_pending_types(user_id: str) -> list[str]:
     """Return data types whose status is pending (not yet triggered)."""
     user_id_str = str(user_id)
     keys = [_get_key(user_id_str, "types", dt, "status") for dt in BACKFILL_DATA_TYPES]
@@ -23,7 +22,7 @@ def get_pending_types(user_id: str | UUID) -> list[str]:
     return [dt for dt, status in zip(BACKFILL_DATA_TYPES, statuses) if not status or status == "pending"]
 
 
-def mark_type_triggered(user_id: str | UUID, data_type: str) -> None:
+def mark_type_triggered(user_id: str, data_type: str) -> None:
     """Mark a data type as triggered (backfill request sent to Garmin)."""
     user_id_str = str(user_id)
     now = datetime.now(timezone.utc).isoformat()
@@ -42,7 +41,7 @@ def mark_type_triggered(user_id: str | UUID, data_type: str) -> None:
     )
 
 
-def mark_type_success(user_id: str | UUID, data_type: str) -> bool:
+def mark_type_success(user_id: str, data_type: str) -> bool:
     """Mark a data type as successfully completed (webhook received data).
 
     Returns:
@@ -71,7 +70,7 @@ def mark_type_success(user_id: str | UUID, data_type: str) -> bool:
     return True
 
 
-def mark_type_failed(user_id: str | UUID, data_type: str, error: str) -> None:
+def mark_type_failed(user_id: str, data_type: str, error: str) -> None:
     """Mark a data type as failed."""
     user_id_str = str(user_id)
     get_redis_client().setex(_get_key(user_id_str, "types", data_type, "status"), REDIS_TTL, "failed")
@@ -90,7 +89,7 @@ def mark_type_failed(user_id: str | UUID, data_type: str, error: str) -> None:
     )
 
 
-def reset_type_status(user_id: str | UUID, data_type: str) -> None:
+def reset_type_status(user_id: str, data_type: str) -> None:
     """Reset a data type to pending status (for retry)."""
     user_id_str = str(user_id)
     for key_suffix in ["status", "triggered_at", "completed_at", "error", "trace_id"]:
@@ -106,7 +105,7 @@ def reset_type_status(user_id: str | UUID, data_type: str) -> None:
     )
 
 
-def mark_type_timed_out(user_id: str | UUID, data_type: str) -> int:
+def mark_type_timed_out(user_id: str, data_type: str) -> int:
     """Mark a data type as timed_out (no webhook within the timeout window).
 
     Returns:
@@ -133,7 +132,7 @@ def mark_type_timed_out(user_id: str | UUID, data_type: str) -> int:
     return new_count
 
 
-def get_timed_out_types(user_id: str | UUID) -> list[str]:
+def get_timed_out_types(user_id: str) -> list[str]:
     """Return data types whose status is timed_out."""
     user_id_str = str(user_id)
     return [
@@ -143,7 +142,7 @@ def get_timed_out_types(user_id: str | UUID) -> list[str]:
     ]
 
 
-def get_type_skip_count(user_id: str | UUID, data_type: str) -> int:
+def get_type_skip_count(user_id: str, data_type: str) -> int:
     """Return the number of times a type has been skipped/timed-out."""
     count = get_redis_client().get(_get_key(str(user_id), "types", data_type, "skip_count"))
     return int(count) if count else 0

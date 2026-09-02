@@ -335,7 +335,7 @@ class DataPointSeriesArchiveRepository:
     def get_daily_activity_aggregates_from_archive(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         series_type_ids: list[int],

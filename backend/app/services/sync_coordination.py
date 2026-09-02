@@ -51,7 +51,7 @@ def _secondaries_key(provider: str, provider_user_id: str, scope: str) -> str:
 def try_become_primary(
     provider: str,
     provider_user_id: str,
-    user_id: UUID,
+    user_id: str,
     *,
     scope: str = "pull",
 ) -> tuple[bool, str, UUID | None]:
@@ -88,7 +88,7 @@ def try_become_primary(
 def release_primary(
     provider: str,
     provider_user_id: str,
-    user_id: UUID,
+    user_id: str,
     token: str,
     *,
     scope: str = "pull",
@@ -105,7 +105,7 @@ def release_primary(
 def store_primary_token(
     provider: str,
     provider_user_id: str,
-    user_id: UUID,
+    user_id: str,
     token: str,
     *,
     scope: str = "pull",
@@ -124,7 +124,7 @@ def store_primary_token(
 def release_primary_for_user(
     provider: str,
     provider_user_id: str,
-    user_id: UUID,
+    user_id: str,
     *,
     scope: str = "pull",
 ) -> bool:
@@ -147,7 +147,7 @@ def release_primary_for_user(
 def register_secondary(
     provider: str,
     provider_user_id: str,
-    user_id: UUID,
+    user_id: str,
     *,
     scope: str = "pull",
 ) -> None:

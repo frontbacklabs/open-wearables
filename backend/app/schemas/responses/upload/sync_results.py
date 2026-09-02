@@ -1,5 +1,4 @@
 from typing import Any
-from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -10,7 +9,7 @@ class ProviderSyncResult(BaseModel):
 
 
 class SyncVendorDataResult(BaseModel):
-    user_id: UUID | str
+    user_id: str
     start_date: str | None = None
     end_date: str | None = None
     providers_synced: dict[str, ProviderSyncResult] = {}

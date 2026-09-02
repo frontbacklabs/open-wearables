@@ -10,7 +10,7 @@ from app.utils.dates import ZoneOffset
 
 
 class TimeSeriesSampleBase(BaseModel):
-    user_id: UUID
+    user_id: str
     source: str | None = None  # e.g., "apple_health_sdk", "garmin_connect_api"
     device_model: str | None = None  # e.g., "iPhone10,5", "Forerunner 910XT"
     data_source_id: UUID | None = Field(

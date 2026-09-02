@@ -1,5 +1,4 @@
 from logging import Logger, getLogger
-from uuid import UUID
 
 from app.database import DbSession
 from app.models import HealthScore
@@ -34,7 +33,7 @@ class HealthScoreService(
     def get_latest_by_category(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         category: HealthScoreCategory,
     ) -> HealthScore | None:
         return self.crud.get_latest_by_category(db_session, user_id, category)
@@ -43,7 +42,7 @@ class HealthScoreService(
     def get_latest_per_category(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> list[HealthScore]:
         return self.crud.get_latest_per_category(db_session, user_id)
 
@@ -51,7 +50,7 @@ class HealthScoreService(
     def get_scores_with_filters(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         params: HealthScoreQueryParams,
     ) -> tuple[list[HealthScore], int]:
         return self.crud.get_with_filters(db_session, user_id, params)

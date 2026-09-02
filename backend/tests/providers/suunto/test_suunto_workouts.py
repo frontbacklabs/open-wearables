@@ -28,6 +28,7 @@ from app.schemas.providers.suunto import HeartRateJSON
 from app.schemas.providers.suunto import WorkoutJSON as SuuntoWorkoutJSON
 from app.services.providers.suunto.oauth import SuuntoOAuth
 from app.services.providers.suunto.workouts import SuuntoWorkouts
+from tests.factories import fake_firebase_uid
 
 
 class TestSuuntoWorkouts:
@@ -201,7 +202,7 @@ class TestSuuntoWorkouts:
         """Should normalize Suunto workout to EventRecordCreate."""
         # Arrange
         workout = SuuntoWorkoutJSON(**sample_workout_data)
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         record, detail = suunto_workouts._normalize_workout(workout, user_id)
@@ -228,7 +229,7 @@ class TestSuuntoWorkouts:
         # Use proper HeartRateJSON model for hrdata when using model_construct
         workout_data["hrdata"] = sample_hrdata
         workout = SuuntoWorkoutJSON.model_construct(**workout_data)
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         record, detail = suunto_workouts._normalize_workout(workout, user_id)
@@ -245,7 +246,7 @@ class TestSuuntoWorkouts:
         """Should create workout detail with metrics."""
         # Arrange
         workout = SuuntoWorkoutJSON(**sample_workout_data)
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         record, detail = suunto_workouts._normalize_workout(workout, user_id)

@@ -156,7 +156,7 @@ class EventRecordService(
     def _recompute_sleep_scores(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         sleep_dates: set[date],
     ) -> None:
         """Delete existing internal sleep scores for each date and recompute them immediately.
@@ -211,7 +211,7 @@ class EventRecordService(
     def find_adjacent_sleep_record(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
         threshold_minutes: int,
@@ -226,7 +226,7 @@ class EventRecordService(
     def create_or_merge_sleep(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         record: EventRecordCreate,
         detail: EventRecordDetailCreate,
         threshold_minutes: int,
@@ -279,7 +279,7 @@ class EventRecordService(
     def _create_or_merge_sleep_inner(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         record: EventRecordCreate,
         detail: EventRecordDetailCreate,
         threshold_minutes: int,
@@ -697,7 +697,7 @@ class EventRecordService(
     def get_workouts(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         params: EventRecordQueryParams,
     ) -> PaginatedResponse[Workout]:
         params.category = "workout"
@@ -784,7 +784,7 @@ class EventRecordService(
     def get_workout_detailed(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         workout_id: UUID,
     ) -> WorkoutDetailed | None:
         """Get a detailed workout record with all associated data."""
@@ -833,7 +833,7 @@ class EventRecordService(
     def get_sleep_sessions(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         params: EventRecordQueryParams,
         filter_by_priority: bool = False,
     ) -> PaginatedResponse[SleepSession]:
@@ -941,7 +941,7 @@ class EventRecordService(
     def get_menstrual_cycles(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         params: EventRecordQueryParams,
     ) -> PaginatedResponse[MenstrualCycleRecord]:
         params.category = "menstrual_cycle"
@@ -1020,7 +1020,7 @@ class EventRecordService(
     def delete_event_record(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         record_id: UUID,
         category: str,
     ) -> bool:

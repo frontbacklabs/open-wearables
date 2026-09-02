@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import Depends
 from sqlalchemy import UUID as SQL_UUID
 from sqlalchemy import Date, DateTime, Engine, String, Text, create_engine, func, inspect
-from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -21,6 +20,7 @@ from sqlalchemy.orm import (
     mapped_column,
     sessionmaker,
 )
+from sqlalchemy.pool import NullPool
 
 from app.config import settings
 from app.schemas.auth import ConnectionStatus, LiveSyncMode, TokenType

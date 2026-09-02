@@ -21,7 +21,7 @@ class DataSourceRepository(
 
     def _build_identity_filter(
         self,
-        user_id: UUID,
+        user_id: str,
         provider: ProviderName,
         device_model: str | None,
         source: str | None,
@@ -37,7 +37,7 @@ class DataSourceRepository(
     def get_by_identity(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: ProviderName,
         device_model: str | None = None,
         source: str | None = None,
@@ -51,7 +51,7 @@ class DataSourceRepository(
     def ensure_data_source(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: ProviderName,
         user_connection_id: UUID | None = None,
         device_model: str | None = None,
@@ -168,7 +168,7 @@ class DataSourceRepository(
     def get_user_data_sources(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> list[DataSource]:
         return (
             db_session.query(self.model)
@@ -180,7 +180,7 @@ class DataSourceRepository(
     def delete_user_provider_data(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: ProviderName,
     ) -> int:
         """Delete all of a user's data for a single provider.

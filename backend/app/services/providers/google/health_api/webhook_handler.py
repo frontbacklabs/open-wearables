@@ -29,7 +29,7 @@ import json
 import logging
 from datetime import datetime
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from celery import current_app as celery_app
 from fastapi import HTTPException, Request
@@ -225,7 +225,7 @@ class GoogleWebhookHandler(BaseWebhookHandler):
             )
             return {"status": "user_not_found", "health_user_id": data.health_user_id, "data_type": data.data_type}
 
-        user_id: UUID = connection.user_id
+        user_id: str = connection.user_id
 
         window = self._window(data.intervals)
         if window is None:
@@ -270,7 +270,7 @@ class GoogleWebhookHandler(BaseWebhookHandler):
     def _fetch_and_save(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         data_type: str,
         start: datetime,
         end: datetime,

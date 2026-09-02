@@ -7,9 +7,9 @@ import pytest
 from starlette.testclient import TestClient
 
 from app.config import settings
-from tests.factories import ApiKeyFactory
+from tests.factories import ApiKeyFactory, fake_firebase_uid
 
-_USER_ID = "123e4567-e89b-12d3-a456-426614174000"
+_USER_ID = fake_firebase_uid()
 _REF = "s3://bucket/raw-payloads/apple/sdk/2026-08-26/user/x.json"
 _BODY = {
     "provider": "apple",

@@ -3,7 +3,6 @@
 from datetime import date, datetime, timezone
 from logging import getLogger
 from typing import Any
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -18,6 +17,7 @@ from tests.factories import (
     SeriesTypeDefinitionFactory,
     SleepDetailsFactory,
     UserFactory,
+    fake_firebase_uid,
 )
 
 
@@ -37,12 +37,12 @@ def _dt(iso: str) -> datetime:
 
 class TestFilterByPriority:
     def test_returns_empty_for_empty_input(self, db: Session, service: SummariesService) -> None:
-        result = service._filter_by_priority(db, uuid4(), [])
+        result = service._filter_by_priority(db, fake_firebase_uid(), [])
         assert result == []
 
     def test_single_entry_passes_through(self, db: Session, service: SummariesService) -> None:
         entry = {"activity_date": date(2026, 1, 1), "source": "garmin", "device_model": None}
-        result = service._filter_by_priority(db, uuid4(), [entry])
+        result = service._filter_by_priority(db, fake_firebase_uid(), [entry])
         assert result == [entry]
 
     def test_picks_one_entry_per_date(self, db: Session, service: SummariesService) -> None:
@@ -51,7 +51,7 @@ class TestFilterByPriority:
             {"activity_date": date(2026, 1, 1), "source": "apple_health_sdk", "device_model": None},
             {"activity_date": date(2026, 1, 2), "source": "garmin", "device_model": None},
         ]
-        result = service._filter_by_priority(db, uuid4(), entries)
+        result = service._filter_by_priority(db, fake_firebase_uid(), entries)
         assert len(result) == 2
         dates = {r["activity_date"] for r in result}
         assert dates == {date(2026, 1, 1), date(2026, 1, 2)}
@@ -61,7 +61,7 @@ class TestFilterByPriority:
             {"sleep_date": date(2026, 1, 1), "source": "garmin", "device_model": None},
             {"sleep_date": date(2026, 1, 1), "source": "oura", "device_model": None},
         ]
-        result = service._filter_by_priority(db, uuid4(), entries, date_key="sleep_date")
+        result = service._filter_by_priority(db, fake_firebase_uid(), entries, date_key="sleep_date")
         assert len(result) == 1
 
 
@@ -72,7 +72,7 @@ class TestFilterByPriority:
 
 class TestGetUserMaxHr:
     def test_falls_back_to_default_when_no_user(self, db: Session, service: SummariesService) -> None:
-        result = service._get_user_max_hr(db, uuid4(), datetime(2026, 1, 1, tzinfo=timezone.utc))
+        result = service._get_user_max_hr(db, fake_firebase_uid(), datetime(2026, 1, 1, tzinfo=timezone.utc))
         assert result == 190
 
     def test_falls_back_to_default_when_no_birth_date(self, db: Session, service: SummariesService) -> None:
@@ -277,7 +277,7 @@ class TestGetRecoverySummaries:
             "source": "whoop",
             "device_model": "WHOOP",
             "device_type": "band",
-            "record_id": uuid4(),
+            "record_id": fake_firebase_uid(),
             "recorded_at": _dt("2026-01-02T00:00:00+00:00"),
             "recovery_score": 74,
             "resting_heart_rate": 51,
@@ -289,7 +289,7 @@ class TestGetRecoverySummaries:
 
         result = service.get_recovery_summaries(
             db_session=None,
-            user_id=uuid4(),
+            user_id=fake_firebase_uid(),
             start_date=_dt("2026-01-01T00:00:00+00:00"),
             end_date=_dt("2026-01-03T00:00:00+00:00"),
             cursor=None,

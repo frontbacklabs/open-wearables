@@ -8,7 +8,6 @@ Tests cover:
 """
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -16,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.models import User
 from app.repositories.user_repository import UserRepository
 from app.schemas.model_crud.user_management import UserCreateInternal, UserUpdateInternal
-from tests.factories import UserFactory
+from tests.factories import UserFactory, fake_firebase_uid
 
 
 class TestUserRepository:
@@ -31,7 +30,7 @@ class TestUserRepository:
         """Test creating a new user."""
         # Arrange
         user_data = UserCreateInternal(
-            id=uuid4(),
+            id=fake_firebase_uid(),
             created_at=datetime.now(timezone.utc),
             email="test@example.com",
             first_name="John",
@@ -59,7 +58,7 @@ class TestUserRepository:
         """Test creating a user with only required fields."""
         # Arrange
         user_data = UserCreateInternal(
-            id=uuid4(),
+            id=fake_firebase_uid(),
             created_at=datetime.now(timezone.utc),
         )
 
@@ -90,7 +89,7 @@ class TestUserRepository:
     def test_get_nonexistent(self, db: Session, user_repo: UserRepository) -> None:
         """Test retrieving a nonexistent user returns None."""
         # Act
-        result = user_repo.get(db, uuid4())
+        result = user_repo.get(db, fake_firebase_uid())
 
         # Assert
         assert result is None

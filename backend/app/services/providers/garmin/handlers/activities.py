@@ -6,7 +6,6 @@ PING (callbackURL to fetch from Garmin).
 
 import logging
 from typing import Any
-from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
@@ -83,7 +82,7 @@ def process_activity_notification(
         err_result = {**base_result, "status": "validation_error", "error": f"Invalid activity data: {e}"}
         return [err_result for _ in connections]
 
-    primary_user_id: UUID = connections[0].user_id
+    primary_user_id: str = connections[0].user_id
     results: list[dict[str, Any]] = []
 
     for i, connection in enumerate(connections):

@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from faker import Faker
 
@@ -38,7 +38,7 @@ def _sample_value(fake: Faker, min_value: float, max_value: float) -> Decimal:
 
 
 def _make_sample(
-    user_id: UUID,
+    user_id: str,
     recorded_at: datetime,
     series_type: SeriesType,
     value: Decimal,
@@ -92,7 +92,7 @@ def _iter_weekly_timestamps(start: datetime, end: datetime, fake: Faker) -> Iter
 def _emit_intraday(
     spec: SeriesTypeGenSpec,
     series_type: SeriesType,
-    user_id: UUID,
+    user_id: str,
     start: datetime,
     end: datetime,
     provider_desc: ProviderDescriptor,
@@ -114,7 +114,7 @@ def _emit_intraday(
 def _emit_daily(
     spec: SeriesTypeGenSpec,
     series_type: SeriesType,
-    user_id: UUID,
+    user_id: str,
     start: datetime,
     end: datetime,
     provider_desc: ProviderDescriptor,
@@ -138,7 +138,7 @@ def _emit_daily(
 def _emit_weekly(
     spec: SeriesTypeGenSpec,
     series_type: SeriesType,
-    user_id: UUID,
+    user_id: str,
     start: datetime,
     end: datetime,
     provider_desc: ProviderDescriptor,
@@ -158,7 +158,7 @@ def _emit_weekly(
 
 def _emit_paired(
     paired: PairedGenSpec,
-    user_id: UUID,
+    user_id: str,
     start: datetime,
     end: datetime,
     provider_resolver: Callable[[SeriesType], ProviderDescriptor | None],
@@ -189,7 +189,7 @@ def _emit_paired(
 
 
 def _generate_continuous_time_series(
-    user_id: UUID,
+    user_id: str,
     start: datetime,
     end: datetime,
     enabled_types: set[SeriesType],

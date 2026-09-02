@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from fastapi import HTTPException
 
@@ -53,7 +53,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
@@ -75,7 +75,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def _fetch_daily_metrics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         date: datetime,
     ) -> list[dict[str, Any]]:
         """Fetch all metrics for a specific day from Ultrahuman API.
@@ -186,7 +186,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def normalize_sleep(
         self,
         raw_sleep: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize Ultrahuman sleep data (from 'Sleep' type object) to our schema."""
         # Times are unix timestamps
@@ -247,7 +247,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def save_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         normalized_sleep: dict[str, Any],
     ) -> bool:
         """Save normalized sleep data to database as EventRecord with SleepDetails.
@@ -334,7 +334,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def normalize_recovery(
         self,
         raw_recovery: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize Ultrahuman recovery data to our schema."""
         date_str = raw_recovery.get("ultrahuman_date")
@@ -371,7 +371,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def normalize_activity_samples(
         self,
         raw_samples: list[dict[str, Any]],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, list[dict[str, Any]]]:
         """Normalize activity samples into categorized data.
 
@@ -460,7 +460,7 @@ class Ultrahuman247Data(Base247DataTemplate):
 
     def _build_activity_samples(
         self,
-        user_id: UUID,
+        user_id: str,
         normalized_samples: dict[str, list[dict[str, Any]]],
     ) -> list[TimeSeriesSampleCreate]:
         """Build TimeSeriesSampleCreate rows from normalized activity samples (HR, HRV, etc.).
@@ -514,7 +514,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def load_and_save_all(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime | str | None = None,
         end_time: datetime | str | None = None,
         is_first_sync: bool = False,
@@ -671,7 +671,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def get_sleep_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -700,7 +700,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def get_recovery_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -730,7 +730,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def get_activity_samples(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
     ) -> list[dict[str, Any]]:
@@ -760,7 +760,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def get_daily_activity_statistics(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -776,7 +776,7 @@ class Ultrahuman247Data(Base247DataTemplate):
     def normalize_daily_activity(
         self,
         raw_stats: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> dict[str, Any]:
         """Normalize daily activity statistics to our schema.
 

@@ -57,7 +57,7 @@ class EventRecordCreate(EventRecordBase):
     id: UUID
     external_id: str | None = None
     source: str | None = None
-    user_id: UUID
+    user_id: str
     provider: str | None = None
     user_connection_id: UUID | None = None
     data_source_id: UUID | None = None
@@ -73,7 +73,7 @@ class EventRecordResponse(EventRecordBase):
 
     id: UUID
     external_id: str | None
-    user_id: UUID | None
+    user_id: str | None
     source: str | None
     data_source_id: UUID | None
 

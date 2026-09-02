@@ -6,9 +6,10 @@ import pytest
 
 from app.schemas.enums.series_types import SeriesType
 from app.services.fit_parser import FitParseResult, parse_fit_file
+from tests.factories import fake_firebase_uid
 from tests.fixtures.fit_builder import make_cycling_fit, make_running_fit, make_swimming_fit
 
-USER_ID = uuid4()
+USER_ID = fake_firebase_uid()
 DS_ID = uuid4()
 
 

@@ -4,7 +4,6 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
 
 import httpx
 from fastapi import HTTPException, status
@@ -24,7 +23,7 @@ RETRY_BASE_DELAY = 15.0  # Base delay for exponential backoff (seconds): 15s, 30
 
 def _get_valid_token(
     db: DbSession,
-    user_id: UUID,
+    user_id: str,
     provider_name: str,
     connection_repo: UserConnectionRepository,
     oauth: BaseOAuthTemplate,
@@ -96,7 +95,7 @@ def _get_valid_token(
 
 def make_authenticated_request(
     db: DbSession,
-    user_id: UUID,
+    user_id: str,
     connection_repo: UserConnectionRepository,
     oauth: BaseOAuthTemplate,
     api_base_url: str,
@@ -285,7 +284,7 @@ def make_authenticated_request(
 
 def download_binary_content(
     db: DbSession,
-    user_id: UUID,
+    user_id: str,
     connection_repo: UserConnectionRepository,
     oauth: BaseOAuthTemplate,
     provider_name: str,

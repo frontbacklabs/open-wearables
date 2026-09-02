@@ -33,7 +33,7 @@ class HealthScoreBase(BaseModel):
 
 class HealthScoreCreate(HealthScoreBase):
     id: UUID
-    user_id: UUID
+    user_id: str
     data_source_id: UUID | None = None
     provider: ProviderName
     event_record_id: UUID | None = None

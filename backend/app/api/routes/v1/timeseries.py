@@ -1,5 +1,4 @@
 from typing import Annotated, Literal
-from uuid import UUID
 
 from fastapi import APIRouter, Query
 
@@ -16,7 +15,7 @@ router = APIRouter()
 
 @router.get("/users/{user_id}/timeseries")
 def get_timeseries(
-    user_id: UUID,
+    user_id: str,
     start_time: DateTimeQueryParam,
     end_time: DateTimeQueryParam,
     db: DbSession,

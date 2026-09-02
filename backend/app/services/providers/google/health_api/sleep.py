@@ -49,7 +49,7 @@ class GoogleHealthApiSleep:
         self.api_base_url = api_base_url
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def load_and_save(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> int:
+    def load_and_save(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> int:
         """Fetch sleep sessions starting in the window and merge-save each."""
         count = 0
         for point in self._fetch(db, user_id, start_time, end_time):
@@ -65,7 +65,7 @@ class GoogleHealthApiSleep:
             count += 1
         return count
 
-    def _fetch(self, db: DbSession, user_id: UUID, start_time: datetime, end_time: datetime) -> list[dict[str, Any]]:
+    def _fetch(self, db: DbSession, user_id: str, start_time: datetime, end_time: datetime) -> list[dict[str, Any]]:
         window_start = physical_interval(start_time, end_time)["startTime"]
         time_filter = f'sleep.interval.end_time >= "{window_start}"'
         points: list[dict[str, Any]] = []
@@ -107,7 +107,7 @@ class GoogleHealthApiSleep:
         interval: dict[str, Any],
         start: datetime,
         end: datetime,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         record_id = uuid4()
         source_name, device_model = extract_source(point.get("dataSource"))

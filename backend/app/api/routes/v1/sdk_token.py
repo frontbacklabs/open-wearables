@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException, status
 
@@ -14,7 +13,7 @@ router = APIRouter()
 
 @router.post("/users/{user_id}/token")
 def create_user_token(
-    user_id: UUID,
+    user_id: str,
     db: DbSession,
     payload: Annotated[SDKTokenRequest | None, Body()] = None,
     developer: DeveloperOptionalDep = None,

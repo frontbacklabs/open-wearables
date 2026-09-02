@@ -96,7 +96,7 @@ class EventRecordRepository(
     def get_by_external_id(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         external_id: str,
         source: str | None = None,
         provider: str | None = None,
@@ -116,7 +116,7 @@ class EventRecordRepository(
     def delete_by_external_id(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         external_id: str,
         source: str | None = None,
         provider: str | None = None,
@@ -278,7 +278,7 @@ class EventRecordRepository(
             .options(*[selectinload(r) for r in EventRecord.detail_relationship(query_params.category)])
         )
 
-        filters = [DataSource.user_id == UUID(user_id)]
+        filters = [DataSource.user_id == user_id]
 
         # Optional allow-list of record ids as a subquery (e.g. priority-deduplicated
         # sleep sessions). Inlined as `id IN (<subquery>)` before count/cursor/limit so
@@ -413,7 +413,7 @@ class EventRecordRepository(
         )
 
         filters = [
-            DataSource.user_id == UUID(user_id),
+            DataSource.user_id == user_id,
             EventRecord.category == "sleep",
         ]
         if query_params.start_datetime:
@@ -440,7 +440,7 @@ class EventRecordRepository(
     def get_user_event_counts_by_provider(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_datetime: datetime | None = None,
         end_datetime: datetime | None = None,
     ) -> list[tuple[str, str, str | None, int]]:
@@ -522,7 +522,7 @@ class EventRecordRepository(
             # Fallback for older PG versions or tests running on sqlite/older docker images
             return []
 
-    def get_records_containing_stage(self, db_session: DbSession, user_id: UUID, stage_name: str) -> list[EventRecord]:
+    def get_records_containing_stage(self, db_session: DbSession, user_id: str, stage_name: str) -> list[EventRecord]:
         """
         Finds all sleep records that contain at least one occurrence of the specified stage.
         Uses the highly efficient JSONB containment operator (@>).
@@ -546,7 +546,7 @@ class EventRecordRepository(
     def get_sleep_summaries(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         cursor: str | None,
@@ -795,7 +795,7 @@ class EventRecordRepository(
     def _get_sleep_sessions(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> dict[tuple, list[dict]]:
@@ -862,7 +862,7 @@ class EventRecordRepository(
     def get_daily_workout_aggregates(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict]:
@@ -928,7 +928,7 @@ class EventRecordRepository(
     def find_adjacent_sleep_record(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_time: datetime,
         end_time: datetime,
         threshold_minutes: int,
@@ -972,7 +972,7 @@ class EventRecordRepository(
     def get_sleep_records_with_details(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_dt: datetime,
         end_dt: datetime,
     ) -> list[tuple[EventRecord, SleepDetails | None]]:

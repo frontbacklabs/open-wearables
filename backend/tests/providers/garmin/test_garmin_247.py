@@ -16,7 +16,7 @@ from app.repositories.user_connection_repository import UserConnectionRepository
 from app.schemas.enums.series_types import SeriesType
 from app.services.providers.garmin.data_247 import Garmin247Data
 from app.services.providers.garmin.oauth import GarminOAuth
-from tests.factories import UserConnectionFactory, UserFactory
+from tests.factories import UserConnectionFactory, UserFactory, fake_firebase_uid
 
 
 class TestGarmin247Data:
@@ -191,7 +191,7 @@ class TestGarmin247Data:
 
     def test_normalize_sleep(self, garmin_247: Garmin247Data, sample_sleep: dict[str, Any]) -> None:
         """Test normalizing sleep data."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized, _ = garmin_247.normalize_sleep(sample_sleep, user_id)
 
         assert normalized["user_id"] == user_id
@@ -224,7 +224,7 @@ class TestGarmin247Data:
 
     def test_normalize_sleep_end_datetime_from_stages(self, garmin_247: Garmin247Data) -> None:
         """end_datetime and duration include awake time when sleepLevelsMap is present."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         # start at 22:00, durationInSeconds covers only asleep time (2h)
         start_ts = 1705273200  # 2024-01-14 22:00:00 UTC
         asleep_duration = 7200  # 2 hours (deep + light + rem only)
@@ -255,7 +255,7 @@ class TestGarmin247Data:
 
     def test_normalize_sleep_missing_stages(self, garmin_247: Garmin247Data) -> None:
         """Test normalizing sleep with missing stage data."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         sleep_data = {
             "summaryId": "sleep_123",
             "startTimeInSeconds": 1705273200,
@@ -277,7 +277,7 @@ class TestGarmin247Data:
 
     def test_normalize_dailies(self, garmin_247: Garmin247Data, sample_daily: dict[str, Any]) -> None:
         """Test normalizing daily summary data."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized, _ = garmin_247.normalize_dailies(sample_daily, user_id)
 
         assert normalized["user_id"] == user_id
@@ -295,7 +295,7 @@ class TestGarmin247Data:
 
     def test_normalize_dailies_missing_values(self, garmin_247: Garmin247Data) -> None:
         """Test normalizing daily data with missing values."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         daily_data = {
             "summaryId": "daily_123",
             "calendarDate": "2024-01-15",
@@ -315,7 +315,7 @@ class TestGarmin247Data:
 
     def test_normalize_epochs(self, garmin_247: Garmin247Data, sample_epoch: dict[str, Any]) -> None:
         """Test normalizing epoch data."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         epochs = [sample_epoch]
 
         normalized = garmin_247.normalize_epochs(epochs, user_id)
@@ -332,7 +332,7 @@ class TestGarmin247Data:
 
     def test_normalize_epochs_multiple(self, garmin_247: Garmin247Data) -> None:
         """Test normalizing multiple epochs."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         epochs = [
             {
                 "summaryId": "epoch_1",
@@ -380,7 +380,7 @@ class TestGarmin247Data:
 
     def test_save_body_composition_missing_timestamp(self, garmin_247: Garmin247Data, db: Session) -> None:
         """Test saving body composition with missing timestamp."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         body_comp = {"summaryId": "bc_123", "weightInGrams": 75000}
 
         count = garmin_247.save_body_composition(db, user_id, body_comp)
@@ -394,7 +394,7 @@ class TestGarmin247Data:
 
     def test_get_recovery_data_returns_empty(self, garmin_247: Garmin247Data, db: Session) -> None:
         """Test that get_recovery_data returns empty list (Garmin doesn't have recovery endpoint)."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         start = datetime(2024, 1, 15, tzinfo=timezone.utc)
         end = datetime(2024, 1, 16, tzinfo=timezone.utc)
 
@@ -516,7 +516,7 @@ class TestGarmin247Data:
 
     def test_build_dailies_samples(self, garmin_247: Garmin247Data, sample_daily: dict[str, Any]) -> None:
         """Test _build_dailies_samples returns samples without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized, _ = garmin_247.normalize_dailies(sample_daily, user_id)
         samples = garmin_247._build_dailies_samples(user_id, normalized)
 
@@ -526,14 +526,14 @@ class TestGarmin247Data:
 
     def test_build_dailies_samples_empty_on_missing_date(self, garmin_247: Garmin247Data) -> None:
         """Test _build_dailies_samples returns empty for missing date/timestamp."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized = {"user_id": user_id}
         samples = garmin_247._build_dailies_samples(user_id, normalized)
         assert samples == []
 
     def test_build_epochs_samples(self, garmin_247: Garmin247Data, sample_epoch: dict[str, Any]) -> None:
         """Test _build_epochs_samples returns samples without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized = garmin_247.normalize_epochs([sample_epoch], user_id)
         samples = garmin_247._build_epochs_samples(user_id, normalized)
 
@@ -542,7 +542,7 @@ class TestGarmin247Data:
 
     def test_build_body_comp_samples(self, garmin_247: Garmin247Data, sample_body_comp: dict[str, Any]) -> None:
         """Test _build_body_comp_samples returns samples without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = garmin_247._build_body_comp_samples(user_id, sample_body_comp)
         assert len(samples) == 4  # weight, body_fat, BMI, skeletal muscle mass
 
@@ -551,7 +551,7 @@ class TestGarmin247Data:
 
     def test_build_body_comp_samples_missing_timestamp(self, garmin_247: Garmin247Data) -> None:
         """Test _build_body_comp_samples returns empty for missing timestamp."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = garmin_247._build_body_comp_samples(user_id, {"weightInGrams": 75000})
         assert samples == []
 
@@ -559,7 +559,7 @@ class TestGarmin247Data:
         self, garmin_247: Garmin247Data, sample_blood_pressure: dict[str, Any]
     ) -> None:
         """Test _build_blood_pressure_samples reads the webhook timestamp field."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = garmin_247._build_blood_pressure_samples(user_id, sample_blood_pressure)
 
         assert len(samples) == 2  # systolic + diastolic
@@ -574,13 +574,13 @@ class TestGarmin247Data:
 
     def test_build_blood_pressure_samples_missing_timestamp(self, garmin_247: Garmin247Data) -> None:
         """Test _build_blood_pressure_samples returns empty when timestamp is absent."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         samples = garmin_247._build_blood_pressure_samples(user_id, {"systolic": 112, "diastolic": 73})
         assert samples == []
 
     def test_build_hrv_samples(self, garmin_247: Garmin247Data) -> None:
         """Test _build_hrv_samples returns samples without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         hrv_data = {
             "summaryId": "hrv-123",
             "startTimeInSeconds": 1768340715,
@@ -592,7 +592,7 @@ class TestGarmin247Data:
 
     def test_build_stress_samples(self, garmin_247: Garmin247Data) -> None:
         """Test _build_stress_samples returns samples without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         stress_data = {
             "startTimeInSeconds": 1705276800,
             "timeOffsetStressLevelValues": {"0": 25, "300": 30, "600": -1},  # -1 is skipped
@@ -603,7 +603,7 @@ class TestGarmin247Data:
 
     def test_build_respiration_samples_webhook_field(self, garmin_247: Garmin247Data) -> None:
         """allDayRespiration webhook payload uses timeOffsetEpochToBreaths."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         respiration_data = {
             "summaryId": "x36bc70e-6a3c0608",
             "startTimeInSeconds": 1782318600,
@@ -621,7 +621,7 @@ class TestGarmin247Data:
 
     def test_build_sleep_record(self, garmin_247: Garmin247Data, sample_sleep: dict[str, Any]) -> None:
         """Test _build_sleep_record returns record + detail without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized, _ = garmin_247.normalize_sleep(sample_sleep, user_id)
         result = garmin_247._build_sleep_record(user_id, normalized)
 
@@ -635,7 +635,7 @@ class TestGarmin247Data:
         """Regression test for #1135: real Garmin sleep payloads (no heart rate fields -
         Garmin's ClientSleep schema doesn't expose them) must build a SleepDetails ORM
         object without TypeError."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         normalized, _ = garmin_247.normalize_sleep(sample_sleep, user_id)
         result = garmin_247._build_sleep_record(user_id, normalized)
         assert result is not None
@@ -647,7 +647,7 @@ class TestGarmin247Data:
 
     def test_build_activity_record(self, garmin_247: Garmin247Data) -> None:
         """Test _build_activity_record returns record + detail without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         activity = {
             "activityId": 123456,
             "startTimeInSeconds": 1705309200,
@@ -666,13 +666,13 @@ class TestGarmin247Data:
 
     def test_build_activity_record_missing_id(self, garmin_247: Garmin247Data) -> None:
         """Test _build_activity_record returns None for missing activityId."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         result = garmin_247._build_activity_record(user_id, {"startTimeInSeconds": 1705309200})
         assert result is None
 
     def test_build_moveiq_record(self, garmin_247: Garmin247Data) -> None:
         """Test _build_moveiq_record returns record without DB call."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         moveiq = {
             "startTimeInSeconds": 1705309200,
             "durationInSeconds": 600,
@@ -686,7 +686,7 @@ class TestGarmin247Data:
 
     def test_build_moveiq_record_missing_start(self, garmin_247: Garmin247Data) -> None:
         """Test _build_moveiq_record returns None for missing startTime."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         record = garmin_247._build_moveiq_record(user_id, {"activityType": "WALKING"})
         assert record is None
 
@@ -759,7 +759,7 @@ class TestGarmin247Data:
 
     def test_normalize_sleep_includes_naps(self, garmin_247: Garmin247Data) -> None:
         """normalize_sleep passes through the naps list and sets is_nap=False."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         raw = {
             "summaryId": "sleep_with_nap",
             "startTimeInSeconds": 1705273200,
@@ -779,7 +779,7 @@ class TestGarmin247Data:
 
     def test_build_nap_record(self, garmin_247: Garmin247Data) -> None:
         """_build_nap_record returns a record+detail with is_nap=True and correct fields."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         nap = {
             "napDurationInSeconds": 600,
             "napStartTimeInSeconds": 1690916700,
@@ -796,7 +796,7 @@ class TestGarmin247Data:
 
     def test_build_nap_record_missing_fields_returns_none(self, garmin_247: Garmin247Data) -> None:
         """_build_nap_record returns None when start time or duration is missing."""
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
         assert garmin_247._build_nap_record({}, user_id) is None
         assert garmin_247._build_nap_record({"napDurationInSeconds": 600}, user_id) is None
         assert garmin_247._build_nap_record({"napStartTimeInSeconds": 1690916700}, user_id) is None

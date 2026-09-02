@@ -26,7 +26,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -54,7 +54,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def get_workouts_historical(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
         chunk_hours: int = 24,
@@ -99,7 +99,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
 
         return all_activities
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Get activities from Garmin API with options.
 
         Supports extended date ranges by automatically chunking requests
@@ -138,7 +138,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
             params=params,
         )
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Get detailed activity data from Garmin API."""
         return self.get_activity_detail(db, user_id, workout_id)
 
@@ -198,7 +198,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: GarminActivityJSON,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Normalize Garmin activity to EventRecordCreate and EventRecordDetailCreate."""
         workout_id = uuid4()
@@ -242,7 +242,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def _build_bundles(
         self,
         raw: list[GarminActivityJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
         """Build event record payloads for Garmin activities."""
         for raw_workout in raw:
@@ -251,7 +251,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def load_data(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         **kwargs: Any,
     ) -> int:
         """No-op: Garmin activity data arrives via webhooks.
@@ -265,7 +265,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
     def get_activity_detail(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         activity_id: str,
     ) -> dict:
         """Get detailed activity data from Garmin API."""
@@ -275,7 +275,7 @@ class GarminWorkouts(BaseWorkoutsTemplate):
         self,
         db: DbSession,
         activities: list[GarminActivityJSON],
-        user_id: UUID,
+        user_id: str,
     ) -> list[UUID]:
         """Process activities received from push notification and save to database.
 

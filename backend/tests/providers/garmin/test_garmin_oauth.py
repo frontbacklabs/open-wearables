@@ -1,7 +1,6 @@
 """Tests for Garmin OAuth implementation."""
 
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import httpx
 import pytest
@@ -13,7 +12,7 @@ from app.repositories.user_repository import UserRepository
 from app.schemas.auth import AuthenticationMethod
 from app.schemas.model_crud.credentials import OAuthTokenResponse, ProviderCredentials, ProviderEndpoints
 from app.services.providers.garmin.oauth import GarminOAuth
-from tests.factories import UserConnectionFactory, UserFactory
+from tests.factories import UserConnectionFactory, UserFactory, fake_firebase_uid
 
 
 class TestGarminOAuth:
@@ -61,7 +60,7 @@ class TestGarminOAuth:
         mock_redis_client = MagicMock()
         mock_get_redis.return_value = mock_redis_client
 
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         auth_url, state = garmin_oauth.get_authorization_url(user_id)

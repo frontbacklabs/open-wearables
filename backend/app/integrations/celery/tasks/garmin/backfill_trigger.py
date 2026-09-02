@@ -7,7 +7,6 @@ and scheduling the timeout checker.
 from datetime import timedelta
 from logging import getLogger
 from typing import Any
-from uuid import UUID
 
 from celery import shared_task
 from fastapi import HTTPException
@@ -57,17 +56,9 @@ def trigger_backfill_for_type(user_id: str, data_type: str) -> dict[str, Any]:
     if data_type not in BACKFILL_DATA_TYPES:
         return {"error": f"Invalid data type: {data_type}"}
 
-    try:
-        user_uuid = UUID(user_id)
-    except ValueError as e:
-        log_structured(
-            logger,
-            "error",
-            "Invalid user_id",
-            user_id=user_id,
-            error=str(e),
-        )
-        return {"error": f"Invalid user_id: {e}"}
+    if not user_id:
+        log_structured(logger, "error", "Missing user_id")
+        return {"error": "user_id must not be empty"}
 
     trace_id = get_trace_id(user_id)
     type_trace_id = set_type_trace_id(user_id, data_type)
@@ -101,7 +92,7 @@ def trigger_backfill_for_type(user_id: str, data_type: str) -> dict[str, Any]:
     with SessionLocal() as db:
         try:
             connection_repo = UserConnectionRepository()
-            connection = connection_repo.get_by_user_and_provider(db, user_uuid, "garmin")
+            connection = connection_repo.get_by_user_and_provider(db, user_id, "garmin")
 
             if not connection:
                 error = "No Garmin connection"
@@ -124,7 +115,7 @@ def trigger_backfill_for_type(user_id: str, data_type: str) -> dict[str, Any]:
 
             result = backfill_service.trigger_backfill(
                 db=db,
-                user_id=user_uuid,
+                user_id=user_id,
                 data_types=[data_type],
                 start_time=start_time,
                 end_time=end_time,
@@ -152,7 +143,7 @@ def trigger_backfill_for_type(user_id: str, data_type: str) -> dict[str, Any]:
                     )
                     retry_result = backfill_service.trigger_backfill(
                         db=db,
-                        user_id=user_uuid,
+                        user_id=user_id,
                         data_types=[data_type],
                         start_time=start_time_fallback,
                         end_time=end_time,

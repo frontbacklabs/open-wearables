@@ -13,7 +13,6 @@ Tests cover:
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
 
 import pytest
 from jose import jwt
@@ -24,6 +23,7 @@ from app.repositories.user_connection_repository import UserConnectionRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.model_crud.credentials import OAuthTokenResponse
 from app.services.providers.suunto.oauth import SuuntoOAuth
+from tests.factories import fake_firebase_uid
 
 
 class TestSuuntoOAuth:
@@ -65,7 +65,7 @@ class TestSuuntoOAuth:
     def test_get_authorization_url(self, suunto_oauth: SuuntoOAuth) -> None:
         """Should generate authorization URL with correct parameters."""
         # Arrange
-        user_id = uuid4()
+        user_id = fake_firebase_uid()
 
         # Act
         auth_url, state = suunto_oauth.get_authorization_url(user_id)

@@ -1,11 +1,11 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 
 from app.services.providers.fitbit.workouts import FitbitWorkouts
+from tests.factories import fake_firebase_uid
 
 RAW_ACTIVITY = {
     "logId": 12345678,
@@ -36,7 +36,7 @@ def fitbit_workouts() -> FitbitWorkouts:
 
 
 def test_normalize_workout_record_fields(fitbit_workouts: FitbitWorkouts) -> None:
-    user_id = uuid4()
+    user_id = fake_firebase_uid()
     record, detail = fitbit_workouts._normalize_workout(RAW_ACTIVITY, user_id)
 
     assert record.user_id == user_id
@@ -48,7 +48,7 @@ def test_normalize_workout_record_fields(fitbit_workouts: FitbitWorkouts) -> Non
 
 
 def test_normalize_workout_detail_metrics(fitbit_workouts: FitbitWorkouts) -> None:
-    user_id = uuid4()
+    user_id = fake_firebase_uid()
     record, detail = fitbit_workouts._normalize_workout(RAW_ACTIVITY, user_id)
 
     assert detail.heart_rate_avg == Decimal("155")
@@ -58,7 +58,7 @@ def test_normalize_workout_detail_metrics(fitbit_workouts: FitbitWorkouts) -> No
 
 def test_normalize_workout_missing_heart_rate(fitbit_workouts: FitbitWorkouts) -> None:
     activity = {**RAW_ACTIVITY, "averageHeartRate": None}
-    user_id = uuid4()
+    user_id = fake_firebase_uid()
     record, detail = fitbit_workouts._normalize_workout(activity, user_id)
     assert detail.heart_rate_avg is None
 
@@ -66,7 +66,7 @@ def test_normalize_workout_missing_heart_rate(fitbit_workouts: FitbitWorkouts) -
 def test_normalize_workout_missing_source(fitbit_workouts: FitbitWorkouts) -> None:
     activity = {**RAW_ACTIVITY}
     del activity["source"]
-    user_id = uuid4()
+    user_id = fake_firebase_uid()
     record, detail = fitbit_workouts._normalize_workout(activity, user_id)
     assert record.source_name == "Fitbit"
 

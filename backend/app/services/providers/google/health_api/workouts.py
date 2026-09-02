@@ -56,7 +56,7 @@ class GoogleHealthApiWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[dict[str, Any]]:
@@ -72,7 +72,7 @@ class GoogleHealthApiWorkouts(BaseWorkoutsTemplate):
                 kept.append(point)
         return kept
 
-    def _fetch_points(self, db: DbSession, user_id: UUID) -> list[dict[str, Any]]:
+    def _fetch_points(self, db: DbSession, user_id: str) -> list[dict[str, Any]]:
         points: list[dict[str, Any]] = []
         page_token: str | None = None
         while True:
@@ -100,7 +100,7 @@ class GoogleHealthApiWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: dict[str, Any],
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Map an Exercise DataPoint to an EventRecord + detail."""
         workout_id = uuid4()
@@ -148,7 +148,7 @@ class GoogleHealthApiWorkouts(BaseWorkoutsTemplate):
 
     # -- load ------------------------------------------------------------------
 
-    def load_data(self, db: DbSession, user_id: UUID, **kwargs: Any) -> int:
+    def load_data(self, db: DbSession, user_id: str, **kwargs: Any) -> int:
         """Fetch Exercises in the window and persist each as an EventRecord + detail."""
         start = self._as_datetime(kwargs.get("start_date"))
         end = self._as_datetime(kwargs.get("end_date")) or datetime.now().astimezone()

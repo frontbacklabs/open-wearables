@@ -30,7 +30,7 @@ import json
 import logging
 import time
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from celery import current_app as celery_app
 from fastapi import HTTPException, Request
@@ -189,7 +189,7 @@ class WhoopWebhookHandler(BaseWebhookHandler):
             )
             return {"status": "user_not_found", "whoop_user_id": notification.user_id, "event_type": notification.type}
 
-        user_id: UUID = connection.user_id
+        user_id: str = connection.user_id
         resource_id = str(notification.id)
 
         log_structured(
@@ -233,7 +233,7 @@ class WhoopWebhookHandler(BaseWebhookHandler):
         self,
         db: DbSession,
         event_type: WhoopWebhookNotificationType,
-        user_id: UUID,
+        user_id: str,
         resource_id: str,
     ) -> dict[str, Any]:
         """Fetch the specific resource from the Whoop API and save it."""
@@ -284,7 +284,7 @@ class WhoopWebhookHandler(BaseWebhookHandler):
         self,
         db: DbSession,
         event_type: WhoopWebhookNotificationType,
-        user_id: UUID,
+        user_id: str,
         resource_id: str,
     ) -> dict[str, Any]:
         """Delete the EventRecord matching external_id.

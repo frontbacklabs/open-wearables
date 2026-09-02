@@ -6,7 +6,6 @@ from abc import ABC, abstractmethod
 from base64 import b64encode, urlsafe_b64encode
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from uuid import UUID
 
 import httpx
 from fastapi import HTTPException
@@ -67,7 +66,7 @@ class BaseOAuthTemplate(ABC):
     use_pkce: bool = False
     auth_method: AuthenticationMethod = AuthenticationMethod.BASIC_AUTH
 
-    def get_authorization_url(self, user_id: UUID, redirect_uri: str | None = None) -> tuple[str, str]:
+    def get_authorization_url(self, user_id: str, redirect_uri: str | None = None) -> tuple[str, str]:
         """Generates the provider's authorization URL.
 
         Returns:
@@ -133,7 +132,7 @@ class BaseOAuthTemplate(ABC):
 
         return oauth_state
 
-    def refresh_access_token(self, db: DbSession, user_id: UUID, refresh_token: str) -> OAuthTokenResponse:
+    def refresh_access_token(self, db: DbSession, user_id: str, refresh_token: str) -> OAuthTokenResponse:
         """Refreshes the access token using the refresh token."""
         data, headers = self._prepare_refresh_request(refresh_token)
 
@@ -197,7 +196,7 @@ class BaseOAuthTemplate(ABC):
             )
             raise HTTPException(status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Token refresh failed: {str(e)}")
 
-    def _revoke_connection(self, db: DbSession, user_id: UUID, *, reason: str) -> None:
+    def _revoke_connection(self, db: DbSession, user_id: str, *, reason: str) -> None:
         """Mark the connection revoked and emit a connection.revoked webhook."""
         connection = self.connection_repo.get_by_user_and_provider(db, user_id, self.provider_name)
         if not connection or connection.status == ConnectionStatus.REVOKED:
@@ -371,7 +370,7 @@ class BaseOAuthTemplate(ABC):
     def _save_connection(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         token_response: OAuthTokenResponse,
         user_info: dict[str, str | None],
         oauth_state: OAuthState,

@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from app.database import DbSession
 from app.repositories.event_record_repository import EventRecordRepository
@@ -37,7 +36,7 @@ class BaseWorkoutsTemplate(ABC):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -58,7 +57,7 @@ class BaseWorkoutsTemplate(ABC):
     def _normalize_workout(
         self,
         raw_workout: Any,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Converts a provider-specific workout object into a standardized EventRecordCreate schema.
 
@@ -74,7 +73,7 @@ class BaseWorkoutsTemplate(ABC):
     def process_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> None:
@@ -84,7 +83,7 @@ class BaseWorkoutsTemplate(ABC):
         for raw in raw_workouts:
             self._process_single_workout(db, user_id, raw)
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Fetch workouts from API with flexible parameters (for API endpoint).
 
         Override this method in subclasses that support cloud API access.
@@ -92,7 +91,7 @@ class BaseWorkoutsTemplate(ABC):
         """
         raise NotImplementedError(f"{self.__class__.__name__} does not support API-based workout fetching")
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Fetch detailed workout from API (for API endpoint).
 
         Override this method in subclasses that support cloud API access.
@@ -100,7 +99,7 @@ class BaseWorkoutsTemplate(ABC):
         """
         raise NotImplementedError(f"{self.__class__.__name__} does not support API-based workout detail fetching")
 
-    def load_data(self, db: DbSession, user_id: UUID, **kwargs: Any) -> int:
+    def load_data(self, db: DbSession, user_id: str, **kwargs: Any) -> int:
         """Load data from provider API.
 
         Override this method in subclasses that support cloud API access.
@@ -108,7 +107,7 @@ class BaseWorkoutsTemplate(ABC):
         """
         raise NotImplementedError(f"{self.__class__.__name__} does not support API-based data loading")
 
-    def process_payload(self, db: DbSession, user_id: UUID, payload: Any, source_type: str) -> None:
+    def process_payload(self, db: DbSession, user_id: str, payload: Any, source_type: str) -> None:
         """Template method to process a pushed payload (Push flow).
 
         Args:
@@ -125,7 +124,7 @@ class BaseWorkoutsTemplate(ABC):
         # and then call _process_single_workout.
         pass
 
-    def _process_single_workout(self, db: DbSession, user_id: UUID, raw_workout: Any) -> None:
+    def _process_single_workout(self, db: DbSession, user_id: str, raw_workout: Any) -> None:
         """Internal method to normalize and save a single workout."""
         record, detail = self._normalize_workout(raw_workout, user_id)
         self._save_workout(db, record, detail)
@@ -144,7 +143,7 @@ class BaseWorkoutsTemplate(ABC):
     def _make_api_request(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         endpoint: str,
         method: str = "GET",
         params: dict[str, Any] | None = None,

@@ -6,7 +6,7 @@ from app.schemas.enums import ProviderName
 
 
 class DataSourceBase(BaseModel):
-    user_id: UUID
+    user_id: str
     provider: ProviderName
     user_connection_id: UUID | None = None
     device_model: str | None = None
@@ -32,7 +32,7 @@ class DataSourceUpdate(BaseModel):
 
 class DataSourceResponse(BaseModel):
     id: UUID
-    user_id: UUID
+    user_id: str
     provider: ProviderName
     user_connection_id: UUID | None = None
     device_model: str | None = None

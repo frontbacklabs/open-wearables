@@ -82,7 +82,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
     def get_by_user_and_provider(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: str,
     ) -> UserConnection | None:
         """Get connection for specific user and provider."""
@@ -100,7 +100,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
     def get_active_connection(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: str,
     ) -> UserConnection | None:
         """Get active connection for specific user and provider."""
@@ -213,7 +213,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
     def get_linked_user_ids(
         self,
         db_session: DbSession,
-        exclude_user_id: UUID,
+        exclude_user_id: str,
         provider_pairs: list[tuple[str, str]],
     ) -> dict[tuple[str, str], list[UUID]]:
         """For a list of (provider, provider_user_id) pairs, return other active OW users
@@ -239,7 +239,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
     def get_by_user_id(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
     ) -> list[UserConnection]:
         """Get all connections for a specific user."""
         return (
@@ -266,7 +266,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
             .all()
         )
 
-    def disconnect(self, db_session: DbSession, user_id: UUID, provider: str) -> int:
+    def disconnect(self, db_session: DbSession, user_id: str, provider: str) -> int:
         """Disconnect a provider in a single UPDATE query. Returns number of rows updated."""
         result = cast(
             CursorResult[tuple[()]],
@@ -368,7 +368,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session.refresh(connection)
         return connection
 
-    def get_all_active_by_user(self, db_session: DbSession, user_id: UUID) -> list[UserConnection]:
+    def get_all_active_by_user(self, db_session: DbSession, user_id: str) -> list[UserConnection]:
         """Get all active connections for a specific user."""
         return (
             db_session.query(self.model)
@@ -394,7 +394,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
     def ensure_sdk_connection(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider: str,
     ) -> UserConnection:
         """Ensure an SDK-based connection exists for a user and provider.

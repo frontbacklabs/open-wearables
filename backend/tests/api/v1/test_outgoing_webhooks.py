@@ -31,7 +31,7 @@ from app.services.outgoing_webhooks.events import (
     on_workout_created,
 )
 from app.utils.security import create_access_token
-from tests.factories import DeveloperFactory
+from tests.factories import DeveloperFactory, fake_firebase_uid
 
 # Svix eventId charset: colons/plus signs from ISO 8601 timestamps must not survive.
 _SVIX_ID_SAFE_RE = re.compile(r"^[a-zA-Z0-9\-_.]+$")
@@ -288,7 +288,7 @@ class TestWebhookEmit:
             patch("app.integrations.celery.tasks.emit_webhook_event_task.emit_webhook_event") as mock_task,
         ):
             on_connection_created(
-                user_id=uuid4(),
+                user_id=fake_firebase_uid(),
                 provider="garmin",
                 connection_id=uuid4(),
                 connected_at="2026-01-01T12:00:00+00:00",

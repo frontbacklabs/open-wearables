@@ -3,7 +3,6 @@ import tempfile
 from logging import getLogger
 from pathlib import Path
 from typing import Any
-from uuid import UUID
 
 from celery import shared_task
 from sqlalchemy.orm import Session
@@ -37,15 +36,10 @@ def process_xml_upload(file_contents: bytes, filename: str, user_id: str) -> dic
     """
     temp_xml_file = None
 
-    try:
-        user_uuid: UUID | None = UUID(user_id)
-    except (ValueError, TypeError):
-        user_uuid = None
-
     run_id = new_run_id(prefix="xml")
-    if user_uuid is not None:
+    if user_id:
         started(
-            user_uuid,
+            user_id,
             "apple",
             SyncSource.XML_IMPORT,
             run_id=run_id,
@@ -63,9 +57,9 @@ def process_xml_upload(file_contents: bytes, filename: str, user_id: str) -> dic
 
             stats = _import_xml_data(db, temp_xml_file, user_id)
 
-            if user_uuid is not None:
+            if user_id:
                 completed(
-                    user_uuid,
+                    user_id,
                     "apple",
                     SyncSource.XML_IMPORT,
                     run_id=run_id,
@@ -92,9 +86,9 @@ def process_xml_upload(file_contents: bytes, filename: str, user_id: str) -> dic
 
         except Exception as e:
             db.rollback()
-            if user_uuid is not None:
+            if user_id:
                 failed(
-                    user_uuid,
+                    user_id,
                     "apple",
                     SyncSource.XML_IMPORT,
                     run_id=run_id,

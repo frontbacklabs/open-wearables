@@ -26,7 +26,7 @@ def process_wellness_items(
     summary_type: str,
     notifications: list[dict[str, Any]],
     errors: list[str],
-    synced_user_ids: set[UUID],
+    synced_user_ids: set[str],
     request_trace_id: str,
 ) -> dict[str, Any]:
     """Process wellness notifications for a single data type.

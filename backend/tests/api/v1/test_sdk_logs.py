@@ -9,9 +9,9 @@ from app.api.routes.v1.sdk_logs import _event_fields
 from app.schemas.enums import SeriesType
 from app.schemas.providers.mobile_sdk import SDKLogRequest
 from app.services.sdk_token_service import create_sdk_user_token
-from tests.factories import ApiKeyFactory
+from tests.factories import ApiKeyFactory, fake_firebase_uid
 
-USER_ID = "123e4567-e89b-12d3-a456-426614174000"
+USER_ID = fake_firebase_uid()
 ENDPOINT = "/api/v1/sdk/users/{user_id}/logs"
 
 SYNC_START_EVENT = {

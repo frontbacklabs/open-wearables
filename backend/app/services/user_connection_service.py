@@ -45,14 +45,14 @@ class UserConnectionService(
         )
 
     @handle_exceptions
-    def get_connections_by_user(self, db_session: DbSession, user_id: UUID) -> list[UserConnection]:
+    def get_connections_by_user(self, db_session: DbSession, user_id: str) -> list[UserConnection]:
         """Get all connections for a user."""
         return self.crud.get_by_user_id(db_session, user_id)
 
     def get_linked_user_ids(
         self,
         db_session: DbSession,
-        user_id: UUID,
+        user_id: str,
         provider_pairs: list[tuple[str, str]],
     ) -> dict[tuple[str, str], list[UUID]]:
         """Return other active OW users sharing the same external account, grouped by (provider, provider_user_id)."""
@@ -60,7 +60,7 @@ class UserConnectionService(
 
     @handle_exceptions
     def disconnect(
-        self, db_session: DbSession, user_id: UUID, provider: str, oauth: BaseOAuthTemplate | None = None
+        self, db_session: DbSession, user_id: str, provider: str, oauth: BaseOAuthTemplate | None = None
     ) -> None:
         """Disconnect a user from a provider. Raises 404 if connection not found.
 
@@ -91,7 +91,7 @@ class UserConnectionService(
 
     @handle_exceptions
     def purge_provider_data(
-        self, db_session: DbSession, user_id: UUID, provider: str, oauth: BaseOAuthTemplate | None = None
+        self, db_session: DbSession, user_id: str, provider: str, oauth: BaseOAuthTemplate | None = None
     ) -> int:
         """Revoke the connection and delete all of the user's data for the provider.
 
@@ -106,7 +106,7 @@ class UserConnectionService(
         return deleted
 
     @handle_exceptions
-    def stamp_last_synced_at(self, db_session: DbSession, user_id: UUID, provider: str) -> None:
+    def stamp_last_synced_at(self, db_session: DbSession, user_id: str, provider: str) -> None:
         """Stamp last_synced_at=now on the user's connection for the given provider.
 
         Used after OAuth completion so the first periodic sync uses the connection
@@ -118,7 +118,7 @@ class UserConnectionService(
             self.crud.update_last_synced_at(db_session, connection)
 
     def _deregister_from_provider(
-        self, db_session: DbSession, user_id: UUID, provider: str, oauth: BaseOAuthTemplate
+        self, db_session: DbSession, user_id: str, provider: str, oauth: BaseOAuthTemplate
     ) -> None:
         """Best-effort call to provider's deregistration API."""
         connection = self.crud.get_by_user_and_provider(db_session, user_id, provider)

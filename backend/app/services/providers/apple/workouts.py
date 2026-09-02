@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Any
-from uuid import UUID
 
 from app.database import DbSession
 from app.repositories.event_record_repository import EventRecordRepository
@@ -36,7 +35,7 @@ class AppleWorkouts(BaseWorkoutsTemplate):
     def get_workouts(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         start_date: datetime,
         end_date: datetime,
     ) -> list[Any]:
@@ -51,7 +50,7 @@ class AppleWorkouts(BaseWorkoutsTemplate):
     def _normalize_workout(
         self,
         raw_workout: Any,
-        user_id: UUID,
+        user_id: str,
     ) -> tuple[EventRecordCreate, EventRecordDetailCreate]:
         """Apple payloads are normalized directly in handler classes."""
         raise NotImplementedError("Direct normalization not supported. Use process_push_data.")
@@ -62,22 +61,22 @@ class AppleWorkouts(BaseWorkoutsTemplate):
             return start_timestamp, end_timestamp
         raise ValueError("Apple Health expects datetime objects for timestamps")
 
-    def get_workouts_from_api(self, db: DbSession, user_id: UUID, **kwargs: Any) -> Any:
+    def get_workouts_from_api(self, db: DbSession, user_id: str, **kwargs: Any) -> Any:
         """Apple Health does not support cloud API - data is push-only."""
         return []
 
-    def get_workout_detail_from_api(self, db: DbSession, user_id: UUID, workout_id: str, **kwargs: Any) -> Any:
+    def get_workout_detail_from_api(self, db: DbSession, user_id: str, workout_id: str, **kwargs: Any) -> Any:
         """Apple Health does not support cloud API - data is push-only."""
         raise NotImplementedError("Apple Health does not support API-based workout detail fetching")
 
-    def load_data(self, db: DbSession, user_id: UUID, **kwargs: Any) -> int:
+    def load_data(self, db: DbSession, user_id: str, **kwargs: Any) -> int:
         """Apple Health uses push-based data ingestion via process_payload."""
         raise NotImplementedError("Apple Health uses process_payload for data ingestion, not load_data")
 
     def process_payload(
         self,
         db: DbSession,
-        user_id: UUID,
+        user_id: str,
         payload: Any,
         source_type: str,
     ) -> None:

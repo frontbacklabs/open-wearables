@@ -13,7 +13,6 @@ Bugs fixed:
 """
 
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -25,6 +24,7 @@ from app.schemas.providers.suunto.workout_import import WorkoutJSON as SuuntoWor
 from app.services.providers.suunto.oauth import SuuntoOAuth
 from app.services.providers.suunto.webhook_handler import SuuntoWebhookHandler
 from app.services.providers.suunto.workouts import SuuntoWorkouts
+from tests.factories import fake_firebase_uid
 
 WORKOUT_KEY = "test-workout-key-0001"
 PAUSED_WORKOUT_KEY = "test-paused-workout-0001"
@@ -274,7 +274,7 @@ class TestProcessWorkoutPayloadShapes:
         """Single-dict `payload` (real webhook shape) is processed exactly once with the dict itself."""
         handler.suunto_workouts.get_workout_detail.return_value = live_response
 
-        result = handler._process_workout(MagicMock(), uuid4(), webhook_payload, TRACE_ID)
+        result = handler._process_workout(MagicMock(), fake_firebase_uid(), webhook_payload, TRACE_ID)
 
         handler.suunto_workouts.get_workout_detail.assert_called_once()
         requested_extensions = handler.suunto_workouts.get_workout_detail.call_args.kwargs["extensions"]
@@ -300,7 +300,7 @@ class TestProcessWorkoutPayloadShapes:
             "metadata": {"ts": "1779025734324"},
         }
 
-        result = handler._process_workout(MagicMock(), uuid4(), webhook_payload, TRACE_ID)
+        result = handler._process_workout(MagicMock(), fake_firebase_uid(), webhook_payload, TRACE_ID)
 
         assert handler.suunto_workouts.process_push_activity.call_count == 2
         processed = [c.args[2] for c in handler.suunto_workouts.process_push_activity.call_args_list]
@@ -309,7 +309,7 @@ class TestProcessWorkoutPayloadShapes:
 
     def test_missing_workout_key_returns_error(self, handler: SuuntoWebhookHandler) -> None:
         """`WORKOUT_CREATED` without a workoutKey/workoutId is rejected without an API call."""
-        result = handler._process_workout(MagicMock(), uuid4(), {"workout": {}}, TRACE_ID)
+        result = handler._process_workout(MagicMock(), fake_firebase_uid(), {"workout": {}}, TRACE_ID)
 
         assert result == {"status": "error", "error": "Missing workoutKey in WORKOUT_CREATED payload"}
         handler.suunto_workouts.get_workout_detail.assert_not_called()
@@ -330,7 +330,7 @@ class TestProcessWorkoutPayloadShapes:
             orig=Exception("duplicate key value violates unique constraint ix_event_record_source_time"),
         )
 
-        result = handler._process_workout(db, uuid4(), webhook_payload, TRACE_ID)
+        result = handler._process_workout(db, fake_firebase_uid(), webhook_payload, TRACE_ID)
 
         assert result == {"status": "ignored", "reason": "duplicate_workout", "workout_key": WORKOUT_KEY}
         db.rollback.assert_called_once()
@@ -431,7 +431,7 @@ class TestNormalizeWithPauses:
         """
         workout = SuuntoWorkoutJSON(**paused_workout_payload)
 
-        record, _ = suunto_workouts._normalize_workout(workout, uuid4())
+        record, _ = suunto_workouts._normalize_workout(workout, fake_firebase_uid())
 
         elapsed_seconds = (record.end_datetime - record.start_datetime).total_seconds()
         assert elapsed_seconds == pytest.approx(301.25, abs=0.01)
@@ -446,7 +446,7 @@ class TestNormalizeWithPauses:
         """When top-level gear is absent, the SummaryExtension copy populates source/device."""
         workout = SuuntoWorkoutJSON(**paused_workout_payload)
 
-        record, _ = suunto_workouts._normalize_workout(workout, uuid4())
+        record, _ = suunto_workouts._normalize_workout(workout, fake_firebase_uid())
 
         assert record.source_name == "Suunto Race 2"
         assert record.device_model == "Suunto Race 2"

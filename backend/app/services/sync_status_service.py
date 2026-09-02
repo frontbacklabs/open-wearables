@@ -50,7 +50,7 @@ SSE_HEARTBEAT_SECONDS = 15.0
 SSE_POLL_TIMEOUT_SECONDS = 1.0
 
 
-def _user_channel(user_id: str | UUID) -> str:
+def _user_channel(user_id: str) -> str:
     return f"sync:status:user:{user_id}"
 
 
@@ -58,11 +58,11 @@ def _global_channel() -> str:
     return "sync:status:all"
 
 
-def _user_recent_key(user_id: str | UUID) -> str:
+def _user_recent_key(user_id: str) -> str:
     return f"sync:status:user:{user_id}:recent"
 
 
-def _user_runs_key(user_id: str | UUID) -> str:
+def _user_runs_key(user_id: str) -> str:
     return f"sync:status:user:{user_id}:runs"
 
 
@@ -195,7 +195,7 @@ def _maybe_dispatch_outgoing_webhook(event: SyncStatusEvent) -> None:
 
 def emit_event(
     *,
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     stage: SyncStage | str,
@@ -206,7 +206,7 @@ def emit_event(
     items_processed: int | None = None,
     items_total: int | None = None,
     error: str | None = None,
-    primary_user_id: UUID | None = None,
+    primary_user_id: str | None = None,
     metadata: dict[str, Any] | None = None,
     started_at: datetime | None = None,
     ended_at: datetime | None = None,
@@ -214,7 +214,7 @@ def emit_event(
     """Convenience helper that builds and emits a :class:`SyncStatusEvent`."""
     event = SyncStatusEvent(
         run_id=run_id or new_run_id(),
-        user_id=user_id if isinstance(user_id, UUID) else UUID(str(user_id)),
+        user_id=str(user_id),
         provider=provider,
         source=SyncSource(source) if not isinstance(source, SyncSource) else source,
         stage=SyncStage(stage) if not isinstance(stage, SyncStage) else stage,
@@ -233,7 +233,7 @@ def emit_event(
     return event
 
 
-def get_recent_events(user_id: str | UUID, limit: int = 50) -> list[SyncStatusEvent]:
+def get_recent_events(user_id: str, limit: int = 50) -> list[SyncStatusEvent]:
     """Return the most recent stored events for a user (newest first)."""
     raw = get_redis_client().lrange(_user_recent_key(user_id), 0, max(0, limit - 1))
     events: list[SyncStatusEvent] = []
@@ -243,7 +243,7 @@ def get_recent_events(user_id: str | UUID, limit: int = 50) -> list[SyncStatusEv
     return events
 
 
-def get_run_summaries(user_id: str | UUID, limit: int = 20) -> list[SyncRunSummary]:
+def get_run_summaries(user_id: str, limit: int = 20) -> list[SyncRunSummary]:
     """Aggregate recent events into per-run summaries (newest first).
 
     Reads the per-user runs set to discover all known run IDs, then fetches
@@ -351,7 +351,7 @@ def get_all_run_summaries(
 
 
 def stream_user_events(
-    user_id: str | UUID,
+    user_id: str,
     *,
     replay_last: int = 20,
     stop_event: threading.Event | None = None,
@@ -411,13 +411,13 @@ def stream_user_events(
 
 
 def started(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     *,
     run_id: str | None = None,
     message: str | None = None,
-    primary_user_id: UUID | None = None,
+    primary_user_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> SyncStatusEvent:
     """Emit a STARTED / IN_PROGRESS event."""
@@ -436,7 +436,7 @@ def started(
 
 
 def progress(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     *,
@@ -465,7 +465,7 @@ def progress(
 
 
 def completed(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     *,
@@ -473,7 +473,7 @@ def completed(
     status: SyncStatus | str = SyncStatus.SUCCESS,
     message: str | None = None,
     items_processed: int | None = None,
-    primary_user_id: UUID | None = None,
+    primary_user_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> SyncStatusEvent:
     """Emit a COMPLETED terminal event."""
@@ -494,14 +494,14 @@ def completed(
 
 
 def failed(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     *,
     run_id: str,
     error: str,
     message: str | None = None,
-    primary_user_id: UUID | None = None,
+    primary_user_id: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> SyncStatusEvent:
     """Emit a FAILED terminal event."""
@@ -521,7 +521,7 @@ def failed(
 
 
 def cancelled(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     source: SyncSource | str,
     *,
@@ -544,7 +544,7 @@ def cancelled(
 
 
 def webhook_delivered(
-    user_id: str | UUID,
+    user_id: str,
     provider: str,
     *,
     status: SyncStatus,

@@ -31,6 +31,7 @@ from app.services.apple.healthkit.sleep_service import (
     finish_sleep,
     handle_sleep_data,
 )
+from tests.factories import fake_firebase_uid
 
 
 def _dt(iso: str) -> datetime:
@@ -402,7 +403,7 @@ class TestFinishSleep:
         db: Session,
     ) -> None:
         """Finish sleep with old-style 'sleeping' data should set correct totals."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_event_service.create.return_value = mock_record
@@ -467,7 +468,7 @@ class TestFinishSleep:
         db: Session,
     ) -> None:
         """Finish sleep with detailed stages should set deep/rem/light correctly."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         mock_record = MagicMock()
         mock_record.id = uuid4()
         mock_event_service.create.return_value = mock_record
@@ -546,7 +547,7 @@ class TestHandleSleepDataIntegration:
         - 1 in_bed segment (iPhone15,2)
         All within gap threshold → single session.
         """
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         mock_redis = MagicMock()
         mock_redis.get.return_value = None  # No existing state
@@ -596,7 +597,7 @@ class TestHandleSleepDataIntegration:
         db: Session,
     ) -> None:
         """Process a modern payload with detailed sleep stages."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
@@ -640,7 +641,7 @@ class TestSDKSyncEndpointSleep:
         """Endpoint should validate payload with 'sleeping' stage (older Apple Watch)."""
         from app.services.sdk_token_service import create_sdk_user_token
 
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         token = create_sdk_user_token("test_app", user_id)
 
         with patch("app.api.routes.v1.sdk_sync.process_sdk_upload") as mock_task:
@@ -665,7 +666,7 @@ class TestSDKSyncEndpointSleep:
         """Endpoint should validate payload with detailed sleep stages."""
         from app.services.sdk_token_service import create_sdk_user_token
 
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
         token = create_sdk_user_token("test_app", user_id)
 
         with patch("app.api.routes.v1.sdk_sync.process_sdk_upload") as mock_task:
@@ -703,7 +704,7 @@ class TestNoIntermediateRedisSaves:
         db: Session,
     ) -> None:
         """Redis .set() should be called exactly once after processing all stages."""
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
@@ -766,7 +767,7 @@ class TestHistoricalBulkUploadMerging:
         Payload B: 01:00–06:00 (rem + light), chains directly onto A
         """
 
-        user_id = str(uuid4())
+        user_id = fake_firebase_uid()
 
         payload_b = {
             "provider": "apple",

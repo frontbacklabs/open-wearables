@@ -18,12 +18,13 @@ import pytest
 
 from app.schemas.enums import SeriesType
 from app.services.providers.sensorbio.data_247 import SensorBio247Data
+from tests.factories import fake_firebase_uid
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
-USER_ID = uuid4()
+USER_ID = fake_firebase_uid()
 DB = MagicMock()
 
 
