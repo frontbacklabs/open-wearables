@@ -620,11 +620,12 @@ To page through results, pass `cursor=<next_cursor>` until `has_more` is `false`
     ```json
     {
       "date": "2025-01-15",
-      "source": { "provider": "garmin", "device": null },
+      "source": { "provider": "oura", "device": null },
       "start_time": "2025-01-14T22:30:00Z",
       "end_time": "2025-01-15T06:45:00Z",
       "duration_minutes": 450,
       "time_in_bed_minutes": 480,
+      "sleep_latency_seconds": 300,
       "efficiency_percent": 92.5,
       "stages": { "awake_minutes": 20, "light_minutes": 180, "deep_minutes": 120, "rem_minutes": 130 },
       "interruptions_count": 3,
@@ -636,7 +637,8 @@ To page through results, pass `cursor=<next_cursor>` until `has_more` is `false`
       "avg_spo2_percent": 96.0
     }
     ```
-    `duration_minutes` / `time_in_bed_minutes` exclude naps. Units are minutes, not seconds.
+    `duration_minutes` and `time_in_bed_minutes` exclude naps and use minutes. `sleep_latency_seconds` is the
+    sleep-onset latency for the longest main-sleep session and is currently populated only for Oura data.
   </Tab>
   <Tab title="RecoverySummary">
     ```json
