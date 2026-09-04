@@ -328,11 +328,11 @@ class SummariesService:
             if main_minutes is not None or nap_minutes is not None:
                 total_duration_minutes = (main_minutes or 0) + (nap_minutes or 0)
 
-            main_sessions = [s for s in sessions if not s.is_nap]
-            longest_main = max(main_sessions, key=lambda s: s.duration_minutes or 0, default=None)
-            start_time = longest_main.start_time if longest_main else result["min_start_time"]
-            end_time = longest_main.end_time if longest_main else result["max_end_time"]
-            zone_offset = longest_main.zone_offset if longest_main else None
+            main_sessions = [s for s in raw_sessions if not s["is_nap"]]
+            longest_main = max(main_sessions, key=lambda s: s.get("duration_minutes") or 0, default=None)
+            start_time = longest_main["start_time"] if longest_main else result["min_start_time"]
+            end_time = longest_main["end_time"] if longest_main else result["max_end_time"]
+            zone_offset = longest_main.get("zone_offset") if longest_main else None
 
             summary = SleepSummary(
                 date=result["sleep_date"],
@@ -349,6 +349,7 @@ class SummariesService:
                 total_duration_minutes=total_duration_minutes,
                 sessions=sessions or None,
                 time_in_bed_minutes=result.get("time_in_bed_minutes"),
+                sleep_latency_seconds=longest_main.get("sleep_latency_seconds") if longest_main else None,
                 efficiency_percent=result.get("efficiency_percent"),
                 stages=stages,
                 nap_count=result.get("nap_count"),

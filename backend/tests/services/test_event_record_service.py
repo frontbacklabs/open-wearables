@@ -340,6 +340,7 @@ class TestCreateOrMergeSleep:
         rem: int = 60,
         awake: int = 10,
         in_bed: int = 260,
+        latency: int | None = None,
         efficiency: str = "80.00",
         is_nap: bool = False,
     ) -> EventRecordDetailCreate:
@@ -352,6 +353,7 @@ class TestCreateOrMergeSleep:
             sleep_awake_minutes=awake,
             sleep_total_duration_minutes=total,
             sleep_time_in_bed_minutes=in_bed,
+            sleep_latency_seconds=latency,
             sleep_efficiency_score=Decimal(efficiency),
             is_nap=is_nap,
         )
@@ -391,19 +393,47 @@ class TestCreateOrMergeSleep:
             sleep_awake_minutes=22,
             sleep_total_duration_minutes=8,
             sleep_time_in_bed_minutes=30,
+            sleep_latency_seconds=120,
         )
 
         # New main session: 22:25–07:40 (gap of ~59 min from existing end)
         start, end = self._dt(22, 25), self._dt(7, 40, day=22)
         record = self._record(data_source, start, end)
-        detail = self._detail(record.id, deep=90, light=200, rem=80, awake=30, in_bed=430)
+        detail = self._detail(record.id, deep=90, light=200, rem=80, awake=30, in_bed=430, latency=600)
 
         result = event_record_service.create_or_merge_sleep(db, user.id, record, detail, self.THRESHOLD)
+        db.refresh(result)
 
         assert result.start_datetime == self._dt(20, 56)
         assert result.end_datetime == self._dt(7, 40, day=22)
+        assert result.sleep_detail.sleep_latency_seconds == 600
         # duration_seconds covers the full merged window, not the sum of parts
         assert result.duration_seconds == int((self._dt(7, 40, day=22) - self._dt(20, 56)).total_seconds())
+
+    def test_equal_rank_merge_preserves_known_latency(self, db: Session) -> None:
+        user = UserFactory()
+        data_source = DataSourceFactory(user=user)
+        existing = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            start_datetime=self._dt(20),
+            end_datetime=self._dt(22),
+            duration_seconds=7200,
+        )
+        SleepDetailsFactory(
+            event_record=existing,
+            sleep_total_duration_minutes=120,
+            sleep_latency_seconds=None,
+            is_nap=False,
+        )
+        record = self._record(data_source, self._dt(22, 30), self._dt(0, 30, day=22))
+        detail = self._detail(record.id, deep=40, light=40, rem=40, in_bed=120, latency=300)
+
+        result = event_record_service.create_or_merge_sleep(db, user.id, record, detail, self.THRESHOLD)
+        db.refresh(result)
+
+        assert result.sleep_detail.sleep_latency_seconds == 300
 
     def test_merge_sums_stage_minutes(self, db: Session) -> None:
         """Merged record stage minutes equal the sum of both sessions."""

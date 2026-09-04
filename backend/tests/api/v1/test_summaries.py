@@ -54,6 +54,7 @@ class TestSleepSummaryEndpoint:
         assert data["data"][0]["start_time"] == "2025-12-25T22:00:00Z"
         assert data["data"][0]["end_time"] == "2025-12-26T05:00:00Z"
         assert data["data"][0]["duration_minutes"] == 420  # 7 hours
+        assert data["data"][0]["sleep_latency_seconds"] is None
 
     def test_get_sleep_summary_with_details(self, client: TestClient, db: Session) -> None:
         """Test sleep summary returns sleep stage details and efficiency."""
@@ -301,7 +302,12 @@ class TestSleepSummaryEndpoint:
             end_datetime=datetime(2025, 12, 26, 3, 0, 0, tzinfo=timezone.utc),
             duration_seconds=3600,
         )
-        SleepDetailsFactory(event_record=short_record, sleep_total_duration_minutes=60, is_nap=False)
+        SleepDetailsFactory(
+            event_record=short_record,
+            sleep_total_duration_minutes=60,
+            sleep_latency_seconds=120,
+            is_nap=False,
+        )
 
         # Long fragment: 3:30am - 9:30am (6 hours) — the longest session
         long_record = EventRecordFactory(
@@ -312,7 +318,12 @@ class TestSleepSummaryEndpoint:
             duration_seconds=21600,
             zone_offset="+02:00",
         )
-        SleepDetailsFactory(event_record=long_record, sleep_total_duration_minutes=360, is_nap=False)
+        SleepDetailsFactory(
+            event_record=long_record,
+            sleep_total_duration_minutes=360,
+            sleep_latency_seconds=600,
+            is_nap=False,
+        )
 
         api_key = ApiKeyFactory()
         response = client.get(
@@ -329,6 +340,7 @@ class TestSleepSummaryEndpoint:
         # start/end come from the longest session (3:30 - 9:30), not the min/max span
         assert sleep_data["start_time"] == "2025-12-26T03:30:00Z"
         assert sleep_data["end_time"] == "2025-12-26T09:30:00Z"
+        assert sleep_data["sleep_latency_seconds"] == 600
         # total still sums both fragments (1h + 6h = 420 min)
         assert sleep_data["total_duration_minutes"] == 420
         assert len(sleep_data["sessions"]) == 2

@@ -28,6 +28,7 @@ class EventRecordMetrics(TypedDict, total=False):
     elev_low: Decimal | None
     sleep_total_duration_minutes: int | None
     sleep_time_in_bed_minutes: int | None
+    sleep_latency_seconds: int | None
     sleep_efficiency_score: Decimal | None
     sleep_deep_minutes: int | None
     sleep_rem_minutes: int | None

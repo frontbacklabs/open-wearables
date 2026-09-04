@@ -52,6 +52,7 @@ class TestOura247SleepNormalization:
         assert result["provider"] == "oura"
         assert result["oura_sleep_id"] == "sleep-abc123"
         assert result["duration_seconds"] == 28800
+        assert result["sleep_latency_seconds"] == 300
         assert result["efficiency_percent"] == 88.0
 
     def test_normalize_sleep_stages(self, data_247: Oura247Data, sample_oura_sleep: dict) -> None:

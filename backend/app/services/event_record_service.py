@@ -357,6 +357,20 @@ class EventRecordService(
             merged_start = min(adjacent.start_datetime, record.start_datetime)
             merged_end = max(adjacent.end_datetime, record.end_datetime)
 
+            adj_latency = adj_detail.sleep_latency_seconds if adj_detail else None
+            new_latency = detail.sleep_latency_seconds
+            adj_latency_rank = (
+                not bool(adj_detail.is_nap) if adj_detail else True,
+                _adj_int("sleep_total_duration_minutes"),
+            )
+            new_latency_rank = (not bool(detail.is_nap), detail.sleep_total_duration_minutes or 0)
+            merged_latency = (
+                new_latency
+                if new_latency_rank > adj_latency_rank
+                or (new_latency_rank == adj_latency_rank and new_latency is not None and adj_latency is None)
+                else adj_latency
+            )
+
             # Compute per-stage minute totals.  When the windows actually overlap
             # and stage intervals are available, recompute from the merged timeline
             # (clipping overlaps — consistent with Apple SDK's _calculate_final_metrics)
@@ -420,6 +434,7 @@ class EventRecordService(
                 "sleep_awake_minutes": merged_awake,
                 "sleep_total_duration_minutes": merged_total,
                 "sleep_time_in_bed_minutes": merged_in_bed,
+                "sleep_latency_seconds": merged_latency,
                 "sleep_efficiency_score": merged_efficiency,
                 "is_nap": bool(adj_detail.is_nap if adj_detail else False) and bool(detail.is_nap or False),
                 "sleep_stages": merged_stages,

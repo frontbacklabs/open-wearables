@@ -34,6 +34,7 @@ class EventRecordDetailBase(BaseModel):
     # Sleep-specific fields
     sleep_total_duration_minutes: int | None = None
     sleep_time_in_bed_minutes: int | None = None
+    sleep_latency_seconds: int | None = None
     sleep_efficiency_score: Decimal | None = None
     sleep_deep_minutes: int | None = None
     sleep_rem_minutes: int | None = None

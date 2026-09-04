@@ -71,6 +71,9 @@ class SleepSummary(BaseModel):
         None, description="Total of all sleep + nap durations for the day", example=480
     )
     time_in_bed_minutes: int | None = Field(None, description="Total time in bed excluding naps", example=480)
+    sleep_latency_seconds: int | None = Field(
+        None, description="Sleep-onset latency for the longest main-sleep session", example=300
+    )
     efficiency_percent: float | None = Field(None, ge=0, le=100, example=89.5)
     stages: SleepStagesSummary | None = None
     interruptions_count: int | None = None

@@ -27,6 +27,7 @@ class SleepDetails(EventRecordDetail):
 
     sleep_total_duration_minutes: Mapped[int | None]
     sleep_time_in_bed_minutes: Mapped[int | None]
+    sleep_latency_seconds: Mapped[int | None]
     sleep_efficiency_score: Mapped[numeric_5_2 | None]
     sleep_deep_minutes: Mapped[int | None]
     sleep_rem_minutes: Mapped[int | None]
