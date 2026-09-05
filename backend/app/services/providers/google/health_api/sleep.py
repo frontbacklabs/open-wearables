@@ -142,7 +142,11 @@ class GoogleHealthApiSleep:
         }
         in_bed = read_number(summary, "minutesInSleepPeriod")
         asleep = read_number(summary, "minutesAsleep")
-        efficiency = (asleep / in_bed * 100).quantize(Decimal("0.1")) if asleep is not None and in_bed else None
+        efficiency = (
+            (asleep / in_bed * 100).quantize(Decimal("0.1"))
+            if asleep is not None and in_bed is not None and 0 <= asleep <= in_bed and in_bed > 0
+            else None
+        )
         awake = stage_minutes.get("AWAKE")
         if awake is None:
             awake = read_number(summary, "minutesAwake")

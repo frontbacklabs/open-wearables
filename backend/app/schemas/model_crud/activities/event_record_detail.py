@@ -1,7 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from .sleep import SleepStage
 from .zones import HRZones, PowerZones
@@ -47,6 +47,13 @@ class EventRecordDetailBase(BaseModel):
     segments: list[dict] | None = None
     hr_zones: HRZones | None = None
     power_zones: PowerZones | None = None
+
+    @field_validator("sleep_efficiency_score")
+    @classmethod
+    def discard_invalid_sleep_efficiency(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and not 0 <= value <= 100:
+            return None
+        return value
 
 
 class EventRecordDetailCreate(EventRecordDetailBase):

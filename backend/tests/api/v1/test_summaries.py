@@ -110,6 +110,32 @@ class TestSleepSummaryEndpoint:
         assert sleep_data["stages"]["rem_minutes"] == 90
         assert sleep_data["stages"]["awake_minutes"] == 30
 
+    def test_get_sleep_summary_ignores_out_of_range_efficiency(self, client: TestClient, db: Session) -> None:
+        user = UserFactory()
+        mapping = DataSourceFactory(user=user)
+        event_record = EventRecordFactory(
+            mapping=mapping,
+            category="sleep",
+            start_datetime=datetime(2025, 12, 25, 22, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2025, 12, 26, 6, 0, tzinfo=timezone.utc),
+            duration_seconds=28800,
+        )
+        SleepDetailsFactory(
+            event_record=event_record,
+            sleep_total_duration_minutes=420,
+            sleep_efficiency_score=Decimal("137.6"),
+        )
+        api_key = ApiKeyFactory()
+
+        response = client.get(
+            f"/api/v1/users/{user.id}/summaries/sleep",
+            headers=api_key_headers(api_key.id),
+            params={"start_date": "2025-12-25T00:00:00Z", "end_date": "2025-12-27T00:00:00Z"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"][0]["efficiency_percent"] is None
+
     def test_get_sleep_summary_with_physiological_metrics(self, client: TestClient, db: Session) -> None:
         """Test sleep summary returns physiological metrics from time-series data."""
         user = UserFactory()

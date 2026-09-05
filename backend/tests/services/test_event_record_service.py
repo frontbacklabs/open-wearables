@@ -507,6 +507,29 @@ class TestCreateOrMergeSleep:
         expected = round((27 * 30 + 80 * 430) / 460, 2)
         assert result.sleep_detail.sleep_efficiency_score == Decimal(str(expected))
 
+    def test_merge_ignores_out_of_range_efficiency(self, db: Session) -> None:
+        user = UserFactory()
+        data_source = DataSourceFactory(user=user)
+        existing = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            start_datetime=self._dt(20, 56),
+            end_datetime=self._dt(21, 26),
+        )
+        SleepDetailsFactory(
+            event_record=existing,
+            sleep_time_in_bed_minutes=30,
+            sleep_efficiency_score=Decimal("137.6"),
+        )
+        record = self._record(data_source, self._dt(22, 25), self._dt(7, 40, day=22))
+        detail = self._detail(record.id, in_bed=430, efficiency="80.00")
+
+        result = event_record_service.create_or_merge_sleep(db, user.id, record, detail, self.THRESHOLD)
+        db.refresh(result)
+
+        assert result.sleep_detail.sleep_efficiency_score == Decimal("80.0")
+
     def test_old_record_deleted_after_merge(self, db: Session) -> None:
         """The adjacent record is deleted after merging."""
         user = UserFactory()
@@ -839,6 +862,28 @@ class TestGetSleepSessions:
         session = next(s for s in response.data if s.id == record.id)
         assert session.duration_seconds == 28800  # time in bed (unchanged)
         assert session.sleep_duration_seconds == 450 * 60  # actual sleep
+
+    def test_out_of_range_efficiency_is_not_returned(self, db: Session) -> None:
+        user = UserFactory()
+        mapping = DataSourceFactory(user=user, source="google")
+        record = EventRecordFactory(
+            mapping=mapping,
+            category="sleep",
+            type_="sleep",
+            start_datetime=datetime(2026, 4, 10, 23, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 11, 7, 0, tzinfo=timezone.utc),
+            duration_seconds=28800,
+        )
+        SleepDetailsFactory(event_record=record, sleep_efficiency_score=Decimal("137.6"))
+        params = EventRecordQueryParams(
+            start_datetime=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 30, tzinfo=timezone.utc),
+        )
+
+        response = event_record_service.get_sleep_sessions(db, user.id, params)
+
+        session = next(s for s in response.data if s.id == record.id)
+        assert session.efficiency_percent is None
 
     def test_sleep_duration_none_when_details_missing(self, db: Session) -> None:
         """sleep_duration_seconds should be None if SleepDetails has no total duration."""
