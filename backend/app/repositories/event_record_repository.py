@@ -16,6 +16,7 @@ from sqlalchemy import (
     func,
     lateral,
     literal,
+    or_,
     select,
     text,
     true,
@@ -29,7 +30,7 @@ from app.database import DbSession
 from app.models import DataPointSeries, DataSource, EventRecord, SleepDetails, WorkoutDetails
 from app.repositories.data_source_repository import DataSourceRepository
 from app.repositories.repositories import CrudRepository
-from app.schemas.enums import ProviderName, SeriesType, get_series_type_id
+from app.schemas.enums import DeviceType, ProviderName, SeriesType, get_series_type_id
 from app.schemas.model_crud.activities import (
     EventRecordCreate,
     EventRecordQueryParams,
@@ -66,6 +67,7 @@ class EventRecordRepository(
                 device_model=creator.device_model,
                 source=creator.source,
                 software_version=creator.software_version,
+                original_source_name=creator.source,
             )
             data_source_id = data_source.id
 
@@ -551,6 +553,8 @@ class EventRecordRepository(
         end_date: datetime,
         cursor: str | None,
         limit: int,
+        provider_order: dict[ProviderName, int],
+        device_type_order: dict[DeviceType, int],
     ) -> list[dict]:
         """Get daily sleep summaries aggregated by date, source, and device_model.
 
@@ -660,6 +664,91 @@ class EventRecordRepository(
             )
         ).subquery()
 
+        provider_rank = (
+            case(*[(subquery.c.provider == provider, rank) for provider, rank in provider_order.items()], else_=99)
+            if provider_order
+            else literal(99)
+        )
+        device_priorities = {device_type: device_type_order.get(device_type, 99) for device_type in DeviceType}
+        device_model = subquery.c.device_model
+        device_model_lower = func.lower(func.coalesce(device_model, ""))
+        device_type_rank = case(
+            (or_(device_model.is_(None), device_model == ""), 99),
+            (device_model.startswith("Watch"), device_priorities[DeviceType.WATCH]),
+            (
+                or_(device_model.startswith("iPhone"), device_model.startswith("iPad")),
+                device_priorities[DeviceType.PHONE],
+            ),
+            (device_model_lower.contains("watch"), device_priorities[DeviceType.WATCH]),
+            (
+                or_(
+                    device_model_lower.contains("band"),
+                    device_model_lower.contains("vivosmart"),
+                    device_model_lower.contains("vivofit"),
+                ),
+                device_priorities[DeviceType.BAND],
+            ),
+            (
+                or_(device_model_lower.contains("ring"), device_model_lower.contains("oura")),
+                device_priorities[DeviceType.RING],
+            ),
+            (device_model_lower.contains("phone"), device_priorities[DeviceType.PHONE]),
+            (
+                or_(device_model_lower.contains("scale"), device_model_lower.contains("index")),
+                device_priorities[DeviceType.SCALE],
+            ),
+            (
+                or_(
+                    *[
+                        device_model_lower.contains(pattern)
+                        for pattern in (
+                            "forerunner",
+                            "fenix",
+                            "venu",
+                            "epix",
+                            "enduro",
+                            "instinct",
+                            "tactix",
+                            "approach",
+                        )
+                    ]
+                ),
+                device_priorities[DeviceType.WATCH],
+            ),
+            (
+                or_(
+                    *[
+                        device_model_lower.contains(pattern)
+                        for pattern in ("vantage", "grit x", "pacer", "ignite", "unite")
+                    ]
+                ),
+                device_priorities[DeviceType.WATCH],
+            ),
+            (
+                or_(*[device_model_lower.contains(pattern) for pattern in ("suunto", "vertical", "race", "peak")]),
+                device_priorities[DeviceType.WATCH],
+            ),
+            (device_model_lower.contains("whoop"), device_priorities[DeviceType.BAND]),
+            else_=device_priorities[DeviceType.OTHER],
+        )
+        ranked_summaries = db_session.query(
+            *subquery.c,
+            func.row_number()
+            .over(
+                partition_by=subquery.c.sleep_date,
+                order_by=(
+                    provider_rank,
+                    device_type_rank,
+                    func.coalesce(subquery.c.device_model, ""),
+                    subquery.c.record_id_text,
+                ),
+            )
+            .label("priority_rank"),
+        ).subquery()
+        winning_summaries = (
+            db_session.query(*ranked_summaries.c).filter(ranked_summaries.c.priority_rank == 1).subquery()
+        )
+
         hr_id = get_series_type_id(SeriesType.heart_rate)
         sdnn_id = get_series_type_id(SeriesType.heart_rate_variability_sdnn)
         rmssd_id = get_series_type_id(SeriesType.heart_rate_variability_rmssd)
@@ -690,32 +779,32 @@ class EventRecordRepository(
             .where(
                 DataSource.user_id == user_id,
                 DataPointSeries.series_type_definition_id.in_([hr_id, sdnn_id, rmssd_id, resp_id, spo2_id]),
-                DataPointSeries.recorded_at >= subquery.c.min_start_time,
-                DataPointSeries.recorded_at < subquery.c.max_end_time,
+                DataPointSeries.recorded_at >= winning_summaries.c.min_start_time,
+                DataPointSeries.recorded_at < winning_summaries.c.max_end_time,
             )
         )
 
         # Build main query from subquery, casting record_id back to UUID
-        record_id_col = cast(subquery.c.record_id_text, SQL_UUID).label("record_id")
+        record_id_col = cast(winning_summaries.c.record_id_text, SQL_UUID).label("record_id")
         query = db_session.query(
-            subquery.c.sleep_date,
-            subquery.c.min_start_time,
-            subquery.c.max_end_time,
-            subquery.c.total_duration,
-            subquery.c.provider,
-            subquery.c.source,
-            subquery.c.device_model,
-            subquery.c.device_type,
+            winning_summaries.c.sleep_date,
+            winning_summaries.c.min_start_time,
+            winning_summaries.c.max_end_time,
+            winning_summaries.c.total_duration,
+            winning_summaries.c.provider,
+            winning_summaries.c.source,
+            winning_summaries.c.device_model,
+            winning_summaries.c.device_type,
             record_id_col,
-            subquery.c.time_in_bed_minutes,
-            subquery.c.deep_minutes,
-            subquery.c.light_minutes,
-            subquery.c.rem_minutes,
-            subquery.c.awake_minutes,
-            subquery.c.efficiency_weighted_sum,
-            subquery.c.efficiency_duration_sum,
-            subquery.c.nap_count,
-            subquery.c.nap_duration,
+            winning_summaries.c.time_in_bed_minutes,
+            winning_summaries.c.deep_minutes,
+            winning_summaries.c.light_minutes,
+            winning_summaries.c.rem_minutes,
+            winning_summaries.c.awake_minutes,
+            winning_summaries.c.efficiency_weighted_sum,
+            winning_summaries.c.efficiency_duration_sum,
+            winning_summaries.c.nap_count,
+            winning_summaries.c.nap_duration,
             physio_lateral.c.avg_hr,
             physio_lateral.c.avg_hrv_sdnn,
             physio_lateral.c.avg_hrv_rmssd,
@@ -730,15 +819,15 @@ class EventRecordRepository(
 
             if direction == "prev":
                 # Backward pagination: get items BEFORE cursor
-                query = query.filter(tuple_(subquery.c.sleep_date, record_id_col) < (cursor_date, cursor_id))
-                query = query.order_by(desc(subquery.c.sleep_date), desc(record_id_col))
+                query = query.filter(tuple_(winning_summaries.c.sleep_date, record_id_col) < (cursor_date, cursor_id))
+                query = query.order_by(desc(winning_summaries.c.sleep_date), desc(record_id_col))
             else:
                 # Forward pagination: get items AFTER cursor
-                query = query.filter(tuple_(subquery.c.sleep_date, record_id_col) > (cursor_date, cursor_id))
-                query = query.order_by(asc(subquery.c.sleep_date), asc(record_id_col))
+                query = query.filter(tuple_(winning_summaries.c.sleep_date, record_id_col) > (cursor_date, cursor_id))
+                query = query.order_by(asc(winning_summaries.c.sleep_date), asc(record_id_col))
         else:
             # No cursor: default ordering
-            query = query.order_by(asc(subquery.c.sleep_date), asc(record_id_col))
+            query = query.order_by(asc(winning_summaries.c.sleep_date), asc(record_id_col))
 
         # Limit + 1 to check for has_more
         results = query.limit(limit + 1).all()

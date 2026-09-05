@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from logging import getLogger
 from typing import cast
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlalchemy import CursorResult, and_, func, select, tuple_, update
 from sqlalchemy.orm import Query
@@ -11,6 +11,7 @@ from app.database import DbSession
 from app.models import UserConnection
 from app.repositories.repositories import CrudRepository
 from app.schemas.auth import ConnectionStatus
+from app.schemas.enums import SdkConnectionOutcome
 from app.schemas.model_crud.user_management import (
     UserConnectionCreate,
     UserConnectionUpdate,
@@ -19,7 +20,13 @@ from app.schemas.model_crud.user_management import (
 logger = getLogger(__name__)
 
 
-class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCreate, UserConnectionUpdate]):
+class UserConnectionRepository(
+    CrudRepository[
+        UserConnection,
+        UserConnectionCreate,
+        UserConnectionUpdate,
+    ],
+):
     """Repository for managing OAuth user connections to fitness providers."""
 
     def __init__(self, model: type[UserConnection] = UserConnection):
@@ -27,12 +34,16 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
 
     def get_active_count(self, db_session: DbSession) -> int:
         """Get total count of active connections."""
-        return (
-            db_session.query(func.count(self.model.id)).filter(self.model.status == ConnectionStatus.ACTIVE).scalar()
-            or 0
-        )
+        count = func.count(self.model.id)
+        query = db_session.query(count).filter(self.model.status == ConnectionStatus.ACTIVE)
+        return query.scalar() or 0
 
-    def get_active_count_in_range(self, db_session: DbSession, start_date: datetime, end_date: datetime) -> int:
+    def get_active_count_in_range(
+        self,
+        db_session: DbSession,
+        start_date: datetime,
+        end_date: datetime,
+    ) -> int:
         """Get count of active connections created within a date range."""
         return (
             db_session.query(func.count(self.model.id))
@@ -67,7 +78,11 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         )
         return db_session.query(func.count()).select_from(subq).scalar() or 0
 
-    def get_top_providers_by_active_conn(self, db_session: DbSession, limit: int = 3) -> list[tuple[str, int]]:
+    def get_top_providers_by_active_conn(
+        self,
+        db_session: DbSession,
+        limit: int = 3,
+    ) -> list[tuple[str, int]]:
         """Top providers by active connection count, returns (provider, count) pairs."""
         rows = (
             db_session.query(self.model.provider, func.count(self.model.id).label("cnt"))
@@ -148,7 +163,8 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         Used for multi-account sync fan-out: one provider account connected to
         several OpenWearables profiles.
         """
-        return self._active_by_provider_external_id(db_session, provider, provider_user_id).all()
+        query = self._active_by_provider_external_id(db_session, provider, provider_user_id)
+        return query.all()
 
     def get_by_provider_user_id(
         self,
@@ -162,13 +178,21 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         and need to find our internal user.
         """
         try:
-            return self._active_by_provider_external_id(db_session, provider, provider_user_id).one_or_none()
+            return self._active_by_provider_external_id(
+                db_session,
+                provider,
+                provider_user_id,
+            ).one_or_none()
         except MultipleResultsFound:
             logger.warning(
                 "Multiple active connections found for provider_user_id — returning first",
                 extra={"provider": provider, "provider_user_id": provider_user_id},
             )
-            return self._active_by_provider_external_id(db_session, provider, provider_user_id).first()
+            return self._active_by_provider_external_id(
+                db_session,
+                provider,
+                provider_user_id,
+            ).first()
 
     def get_by_provider_username(
         self,
@@ -215,7 +239,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session: DbSession,
         exclude_user_id: str,
         provider_pairs: list[tuple[str, str]],
-    ) -> dict[tuple[str, str], list[UUID]]:
+    ) -> dict[tuple[str, str], list[str]]:
         """For a list of (provider, provider_user_id) pairs, return other active OW users
         sharing the same external account, grouped by pair."""
         if not provider_pairs:
@@ -231,7 +255,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
             )
             .all()
         )
-        result: dict[tuple[str, str], list[UUID]] = {}
+        result: dict[tuple[str, str], list[str]] = {}
         for provider, provider_user_id, linked_user_id in rows:
             result.setdefault((provider, provider_user_id), []).append(linked_user_id)
         return result
@@ -249,7 +273,11 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
             .all()
         )
 
-    def get_expiring_tokens(self, db_session: DbSession, minutes_threshold: int = 5) -> list[UserConnection]:
+    def get_expiring_tokens(
+        self,
+        db_session: DbSession,
+        minutes_threshold: int = 5,
+    ) -> list[UserConnection]:
         """Get connections with tokens expiring soon (for background refresh)."""
         now = datetime.now(timezone.utc)
 
@@ -300,7 +328,12 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session.refresh(connection)
         return connection
 
-    def update_scope(self, db_session: DbSession, connection: UserConnection, scope: str | None) -> UserConnection:
+    def update_scope(
+        self,
+        db_session: DbSession,
+        connection: UserConnection,
+        scope: str | None,
+    ) -> UserConnection:
         """Update connection scope (e.g. when user changes permissions on Garmin Connect)."""
         connection.scope = scope
         connection.updated_at = datetime.now(timezone.utc)
@@ -360,7 +393,11 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session.refresh(connection)
         return connection
 
-    def update_last_synced_at(self, db_session: DbSession, connection: UserConnection) -> UserConnection:
+    def update_last_synced_at(
+        self,
+        db_session: DbSession,
+        connection: UserConnection,
+    ) -> UserConnection:
         """Update the last synced timestamp."""
         connection.last_synced_at = datetime.now(timezone.utc)
         db_session.add(connection)
@@ -381,7 +418,7 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
             .all()
         )
 
-    def get_all_active_users(self, db_session: DbSession) -> list[UUID]:
+    def get_all_active_users(self, db_session: DbSession) -> list[str]:
         """Get all unique user IDs that have active connections."""
         return [
             row.user_id
@@ -396,11 +433,15 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session: DbSession,
         user_id: str,
         provider: str,
-    ) -> UserConnection:
+    ) -> tuple[UserConnection, SdkConnectionOutcome]:
         """Ensure an SDK-based connection exists for a user and provider.
 
         SDK-based providers (like Apple Health) don't use OAuth tokens.
         This method creates or returns an existing connection without tokens.
+
+        Returns the connection and which branch was taken, so the caller can emit
+        ``connection.created`` only on a real state change. The upload path calls
+        this on every batch, so EXISTING must stay silent.
         """
         existing = self.get_by_user_and_provider(db_session, user_id, provider)
         if existing:
@@ -411,7 +452,8 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
                 db_session.add(existing)
                 db_session.commit()
                 db_session.refresh(existing)
-            return existing
+                return existing, SdkConnectionOutcome.REACTIVATED
+            return existing, SdkConnectionOutcome.EXISTING
 
         # Create new SDK connection (no tokens needed)
         connection = UserConnection(
@@ -428,4 +470,4 @@ class UserConnectionRepository(CrudRepository[UserConnection, UserConnectionCrea
         db_session.add(connection)
         db_session.commit()
         db_session.refresh(connection)
-        return connection
+        return connection, SdkConnectionOutcome.CREATED

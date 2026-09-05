@@ -1,13 +1,15 @@
 """Tests for SummariesService."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from logging import getLogger
 from typing import Any
+from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
 
-from app.schemas.enums import ProviderName
+from app.schemas.enums import DeviceType, ProviderName
+from app.services.priority_service import priority_service
 from app.services.summaries_service import SummariesService
 from tests.factories import (
     DataPointSeriesFactory,
@@ -113,6 +115,21 @@ class TestGetSleepSummaries:
             duration_seconds=int((_dt(end) - _dt(start)).total_seconds()),
             zone_offset="+00:00",
         )
+
+    def _make_sleep_for_date(self, data_source: Any, sleep_date: date, record_id: UUID | None = None) -> Any:
+        end = datetime(sleep_date.year, sleep_date.month, sleep_date.day, 6, tzinfo=timezone.utc)
+        values = {
+            "data_source": data_source,
+            "category": "sleep",
+            "type": "sleep",
+            "start_datetime": end - timedelta(hours=8),
+            "end_datetime": end,
+            "duration_seconds": 8 * 3600,
+            "zone_offset": "+00:00",
+        }
+        if record_id is not None:
+            values["id"] = record_id
+        return EventRecordFactory(**values)
 
     def test_returns_empty_when_no_data(self, db: Session, service: SummariesService) -> None:
         user = UserFactory()
@@ -257,9 +274,295 @@ class TestGetSleepSummaries:
             cursor=None,
             limit=3,
         )
-        assert len(result.data) == 3
+        assert [summary.date for summary in result.data] == [date(2026, 1, 2), date(2026, 1, 3), date(2026, 1, 4)]
         assert result.pagination.has_more is True
         assert result.pagination.next_cursor is not None
+
+        second_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2026-01-01T00:00:00+00:00"),
+            _dt("2026-01-10T00:00:00+00:00"),
+            cursor=result.pagination.next_cursor,
+            limit=3,
+        )
+        assert [summary.date for summary in second_page.data] == [date(2026, 1, 5), date(2026, 1, 6)]
+        assert second_page.pagination.has_more is False
+        assert second_page.pagination.next_cursor is None
+
+    def test_multi_provider_pagination_uses_unique_sleep_dates(self, db: Session, service: SummariesService) -> None:
+        user = UserFactory()
+        oura = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura",
+            device_model="Oura Ring",
+            device_type="ring",
+        )
+        google = DataSourceFactory(
+            user=user,
+            provider=ProviderName.GOOGLE,
+            source="google_health",
+            device_model="Pixel Watch",
+            device_type="watch",
+        )
+        priority_service.update_provider_priority(db, ProviderName.OURA, 1)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 2)
+        first_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+        for day_offset in range(120):
+            sleep_date = first_date + timedelta(days=day_offset)
+            for data_source in (oura, google):
+                EventRecordFactory(
+                    data_source=data_source,
+                    category="sleep",
+                    type="sleep",
+                    start_datetime=sleep_date - timedelta(hours=2),
+                    end_datetime=sleep_date + timedelta(hours=6),
+                    duration_seconds=8 * 3600,
+                    zone_offset="+00:00",
+                )
+
+        end_date = first_date + timedelta(days=120)
+        first_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            first_date,
+            end_date,
+            cursor=None,
+            limit=100,
+        )
+
+        assert len(first_page.data) == 100
+        assert first_page.pagination.has_more is True
+        assert first_page.pagination.next_cursor is not None
+
+        second_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            first_date,
+            end_date,
+            cursor=first_page.pagination.next_cursor,
+            limit=100,
+        )
+
+        assert len(second_page.data) == 20
+        assert second_page.pagination.has_more is False
+        dates = [summary.date for summary in first_page.data + second_page.data]
+        assert dates == [(first_date + timedelta(days=offset)).date() for offset in range(120)]
+        assert all(summary.source.provider == ProviderName.OURA for summary in first_page.data + second_page.data)
+
+    def test_priority_selection_is_per_date_with_lower_priority_fallback(
+        self, db: Session, service: SummariesService
+    ) -> None:
+        user = UserFactory()
+        oura = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura",
+            device_model="Oura Ring",
+            device_type="ring",
+        )
+        google = DataSourceFactory(
+            user=user,
+            provider=ProviderName.GOOGLE,
+            source="google_health",
+            device_model="Pixel Watch",
+            device_type="watch",
+        )
+        priority_service.update_provider_priority(db, ProviderName.OURA, 1)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 2)
+        self._make_sleep_for_date(oura, date(2025, 1, 1))
+        self._make_sleep_for_date(google, date(2025, 1, 1))
+        self._make_sleep_for_date(google, date(2025, 1, 2))
+
+        result = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-03T00:00:00+00:00"),
+            cursor=None,
+            limit=10,
+        )
+
+        assert [summary.date for summary in result.data] == [date(2025, 1, 1), date(2025, 1, 2)]
+        assert [summary.source.provider for summary in result.data] == [ProviderName.OURA, ProviderName.GOOGLE]
+
+    def test_device_type_priority_precedes_device_model(self, db: Session, service: SummariesService) -> None:
+        user = UserFactory()
+        watch = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura_watch",
+            device_model="A Watch",
+            device_type="ring",
+        )
+        later_ring = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura_ring_z",
+            device_model="Z Ring",
+            device_type="watch",
+        )
+        earlier_ring = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura_ring_y",
+            device_model="Y Ring",
+            device_type="watch",
+        )
+        priority_service.update_provider_priority(db, ProviderName.OURA, 1)
+        priority_service.update_device_type_priority(db, DeviceType.RING, 1)
+        priority_service.update_device_type_priority(db, DeviceType.WATCH, 2)
+        for data_source in (watch, later_ring, earlier_ring):
+            self._make_sleep_for_date(data_source, date(2025, 1, 1))
+
+        result = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-02T00:00:00+00:00"),
+            cursor=None,
+            limit=10,
+        )
+
+        assert len(result.data) == 1
+        assert result.data[0].source.device == "Y Ring"
+
+    def test_exact_priority_ties_are_stable_across_forward_and_backward_pages(
+        self, db: Session, service: SummariesService
+    ) -> None:
+        user = UserFactory()
+        oura = DataSourceFactory(
+            user=user,
+            provider=ProviderName.OURA,
+            source="oura",
+            device_model="Shared Ring",
+            device_type="ring",
+        )
+        google = DataSourceFactory(
+            user=user,
+            provider=ProviderName.GOOGLE,
+            source="google_health",
+            device_model="Shared Ring",
+            device_type="ring",
+        )
+        priority_service.update_provider_priority(db, ProviderName.OURA, 1)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 1)
+        priority_service.update_device_type_priority(db, DeviceType.RING, 1)
+        expected_dates = [date(2025, 1, day) for day in range(1, 6)]
+        for index, sleep_date in enumerate(expected_dates):
+            self._make_sleep_for_date(oura, sleep_date, UUID(int=100 + index * 2))
+            self._make_sleep_for_date(google, sleep_date, UUID(int=101 + index * 2))
+
+        first_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=None,
+            limit=2,
+        )
+        second_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=first_page.pagination.next_cursor,
+            limit=2,
+        )
+        third_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=second_page.pagination.next_cursor,
+            limit=2,
+        )
+
+        forward_dates = [summary.date for page in (first_page, second_page, third_page) for summary in page.data]
+        assert forward_dates == expected_dates
+        assert all(
+            summary.source.provider == ProviderName.OURA
+            for page in (first_page, second_page, third_page)
+            for summary in page.data
+        )
+
+        repeated_first_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=None,
+            limit=2,
+        )
+        assert [summary.model_dump() for summary in repeated_first_page.data] == [
+            summary.model_dump() for summary in first_page.data
+        ]
+
+        backward_second_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=third_page.pagination.previous_cursor,
+            limit=2,
+        )
+        assert [summary.model_dump() for summary in backward_second_page.data] == [
+            summary.model_dump() for summary in second_page.data
+        ]
+        assert backward_second_page.pagination.has_more is True
+        assert backward_second_page.pagination.previous_cursor is not None
+        assert backward_second_page.pagination.next_cursor is not None
+
+        backward_first_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=backward_second_page.pagination.previous_cursor,
+            limit=2,
+        )
+        assert [summary.model_dump() for summary in backward_first_page.data] == [
+            summary.model_dump() for summary in first_page.data
+        ]
+        assert backward_first_page.pagination.has_more is False
+        assert backward_first_page.pagination.previous_cursor is None
+        assert backward_first_page.pagination.next_cursor is not None
+
+        forward_second_page = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-01T00:00:00+00:00"),
+            _dt("2025-01-06T00:00:00+00:00"),
+            cursor=backward_first_page.pagination.next_cursor,
+            limit=2,
+        )
+        assert [summary.model_dump() for summary in forward_second_page.data] == [
+            summary.model_dump() for summary in second_page.data
+        ]
+
+    def test_sleep_summary_ranking_preserves_date_bounds_and_user_scope(
+        self, db: Session, service: SummariesService
+    ) -> None:
+        user = UserFactory()
+        other_user = UserFactory()
+        user_source = DataSourceFactory(user=user, provider=ProviderName.OURA, source="oura")
+        other_source = DataSourceFactory(user=other_user, provider=ProviderName.OURA, source="oura")
+        for day in range(1, 5):
+            self._make_sleep_for_date(user_source, date(2025, 1, day))
+        self._make_sleep_for_date(other_source, date(2025, 1, 2))
+
+        result = service.get_sleep_summaries(
+            db,
+            user.id,
+            _dt("2025-01-02T00:00:00+00:00"),
+            _dt("2025-01-04T00:00:00+00:00"),
+            cursor=None,
+            limit=10,
+        )
+
+        assert [summary.date for summary in result.data] == [date(2025, 1, 2), date(2025, 1, 3)]
 
 
 # ---------------------------------------------------------------------------

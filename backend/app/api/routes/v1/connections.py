@@ -19,7 +19,7 @@ provider_settings_repo = ProviderSettingsRepository()
 def _with_capabilities(
     conn: object,
     settings_map: dict[str, ProviderSetting],
-    linked_user_ids: list | None = None,
+    linked_user_ids: list[str] | None = None,
 ) -> UserConnectionWithCapabilities:
     enriched = UserConnectionWithCapabilities.model_validate(conn)
     with contextlib.suppress(ValueError):

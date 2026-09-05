@@ -19,7 +19,7 @@ class UnsupportedProviderError(Exception):
 
 
 class ResourceNotFoundError(Exception):
-    def __init__(self, entity_name: str, entity_id: int | UUID | None = None):
+    def __init__(self, entity_name: str, entity_id: int | str | UUID | None = None):
         self.entity_name = entity_name
         if entity_id:
             self.detail = f"{entity_name.capitalize()} with ID: {entity_id} not found."

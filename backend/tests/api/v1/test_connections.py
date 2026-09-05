@@ -189,6 +189,21 @@ class TestConnectionsEndpoints:
         assert connection_data["status"] == ConnectionStatus.ACTIVE.value
         assert connection_data["icon_url"] == "/static/provider-icons/garmin.svg"
 
+    def test_get_connections_returns_linked_string_user_ids(self, client: TestClient, db: Session) -> None:
+        user = UserFactory()
+        linked_user = UserFactory()
+        UserConnectionFactory(user=user, provider="garmin", provider_user_id="shared-account")
+        UserConnectionFactory(user=linked_user, provider="garmin", provider_user_id="shared-account")
+        api_key = ApiKeyFactory()
+
+        response = client.get(
+            f"/api/v1/users/{user.id}/connections",
+            headers=api_key_headers(api_key.id),
+        )
+
+        assert response.status_code == 200
+        assert response.json()[0]["linked_user_ids"] == [linked_user.id]
+
     def test_get_connections_missing_api_key(self, client: TestClient, db: Session) -> None:
         """Test that request without API key is rejected."""
         # Arrange

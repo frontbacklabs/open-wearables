@@ -77,4 +77,4 @@ class UserConnectionWithCapabilities(UserConnectionRead):
     webhook_ping: bool = False
     webhook_callback: bool = False
     live_sync_mode: LiveSyncMode | None = None
-    linked_user_ids: list[UUID] = Field(default_factory=list)
+    linked_user_ids: list[str] = Field(default_factory=list)

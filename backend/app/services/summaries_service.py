@@ -48,6 +48,7 @@ from app.schemas.utils import (
 from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import (
     decode_activity_cursor,
+    decode_cursor,
     encode_activity_cursor,
     encode_cursor,
 )
@@ -255,16 +256,26 @@ class SummariesService:
         """Get daily sleep summaries aggregated by date, provider, and device."""
         self.logger.debug(f"Fetching sleep summaries for user {user_id} from {start_date} to {end_date}")
 
-        # Get aggregated data from repository (now returns list of dicts)
-        results = self.event_record_repo.get_sleep_summaries(db_session, user_id, start_date, end_date, cursor, limit)
-
-        # Filter by priority to get best source per date
-        results = self._filter_by_priority(db_session, user_id, results, date_key="sleep_date")
+        cursor_direction = decode_cursor(cursor)[2] if cursor else "next"
+        provider_order = ProviderPriorityRepository(ProviderPriority).get_priority_order(db_session)
+        device_type_order = DeviceTypePriorityRepository().get_priority_order(db_session)
+        results = self.event_record_repo.get_sleep_summaries(
+            db_session,
+            user_id,
+            start_date,
+            end_date,
+            cursor,
+            limit,
+            provider_order,
+            device_type_order,
+        )
 
         # Check if there's more data
         has_more = len(results) > limit
         if has_more:
             results = results[:limit]
+        if cursor_direction == "prev":
+            results.reverse()
 
         # Generate cursors
         next_cursor: str | None = None
@@ -273,19 +284,24 @@ class SummariesService:
         if results:
             # Use the last result for next cursor
             last_result = results[-1]
-            last_date = last_result["sleep_date"]
-            last_id = last_result["record_id"]
-            last_date_midnight = datetime.combine(last_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-            if has_more:
-                next_cursor = encode_cursor(last_date_midnight, last_id, "next")
+            last_date_midnight = datetime.combine(last_result["sleep_date"], datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            )
+            first_result = results[0]
+            first_date_midnight = datetime.combine(first_result["sleep_date"], datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            )
 
             # Previous cursor if we had a cursor (not first page)
-            if cursor:
-                first_result = results[0]
-                first_date = first_result["sleep_date"]
-                first_id = first_result["record_id"]
-                first_date_midnight = datetime.combine(first_date, datetime.min.time()).replace(tzinfo=timezone.utc)
-                previous_cursor = encode_cursor(first_date_midnight, first_id, "prev")
+            if cursor_direction == "prev":
+                next_cursor = encode_cursor(last_date_midnight, last_result["record_id"], "next")
+                if has_more:
+                    previous_cursor = encode_cursor(first_date_midnight, first_result["record_id"], "prev")
+            else:
+                if has_more:
+                    next_cursor = encode_cursor(last_date_midnight, last_result["record_id"], "next")
+                if cursor:
+                    previous_cursor = encode_cursor(first_date_midnight, first_result["record_id"], "prev")
 
         # Transform to schema
         data = []
