@@ -564,6 +564,10 @@ class EventRecordRepository(
         # Helper: condition for "is NOT a nap" (main sleep)
         # is_nap can be True, False, or NULL - we treat NULL as "not a nap"
         is_main_sleep = func.coalesce(SleepDetails.is_nap, False) == False  # noqa: E712
+        has_valid_efficiency = and_(
+            is_main_sleep,
+            SleepDetails.sleep_efficiency_score.between(0, 100),
+        )
 
         # Local calendar date the session ended (wake-up date) — mirrors score
         # date logic in fill_missing_sleep_scores_task so chart, score, and
@@ -617,14 +621,14 @@ class EventRecordRepository(
                 # Weighted average for efficiency - main sleep only (weight by duration)
                 func.sum(
                     case(
-                        (is_main_sleep, SleepDetails.sleep_efficiency_score * EventRecord.duration_seconds),
+                        (has_valid_efficiency, SleepDetails.sleep_efficiency_score * EventRecord.duration_seconds),
                         else_=None,
                     )
                 ).label("efficiency_weighted_sum"),
                 func.sum(
                     case(
                         (
-                            and_(is_main_sleep, SleepDetails.sleep_efficiency_score != None),  # noqa: E711
+                            has_valid_efficiency,
                             EventRecord.duration_seconds,
                         ),
                         else_=0,

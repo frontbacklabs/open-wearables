@@ -110,6 +110,18 @@ class TestEventRecordDetailCreateValidation:
 
         assert "steps_count" in str(exc_info.value)
 
+    @pytest.mark.parametrize("value", [Decimal("-0.1"), Decimal("100.1")])
+    def test_out_of_range_sleep_efficiency_is_discarded(self, value: Decimal) -> None:
+        detail = EventRecordDetailCreate(record_id=uuid4(), sleep_efficiency_score=value)
+
+        assert detail.sleep_efficiency_score is None
+
+    @pytest.mark.parametrize("value", [Decimal("0"), Decimal("87.5"), Decimal("100")])
+    def test_valid_sleep_efficiency_is_preserved(self, value: Decimal) -> None:
+        detail = EventRecordDetailCreate(record_id=uuid4(), sleep_efficiency_score=value)
+
+        assert detail.sleep_efficiency_score == value
+
     def test_missing_required_field_record_id(self) -> None:
         """Should raise ValidationError when record_id is missing."""
         # Act & Assert

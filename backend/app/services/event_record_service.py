@@ -59,6 +59,12 @@ from app.utils.exceptions import handle_exceptions
 from app.utils.pagination import encode_cursor
 
 
+def _valid_sleep_efficiency(value: Decimal | None) -> Decimal | None:
+    if value is None or not 0 <= value <= 100:
+        return None
+    return value
+
+
 class EventRecordService(
     AppService[EventRecordRepository, EventRecord, EventRecordCreate, EventRecordUpdate],
 ):
@@ -337,11 +343,13 @@ class EventRecordService(
             merged_efficiency: Decimal | None = None
             eff_numerator = 0.0
             eff_denominator = 0
-            if adj_detail and adj_detail.sleep_efficiency_score and adj_in_bed > 0:
-                eff_numerator += float(adj_detail.sleep_efficiency_score) * adj_in_bed
+            adj_efficiency = _valid_sleep_efficiency(adj_detail.sleep_efficiency_score if adj_detail else None)
+            new_efficiency = _valid_sleep_efficiency(detail.sleep_efficiency_score)
+            if adj_efficiency is not None and adj_in_bed > 0:
+                eff_numerator += float(adj_efficiency) * adj_in_bed
                 eff_denominator += adj_in_bed
-            if detail.sleep_efficiency_score and new_in_bed > 0:
-                eff_numerator += float(detail.sleep_efficiency_score) * new_in_bed
+            if new_efficiency is not None and new_in_bed > 0:
+                eff_numerator += float(new_efficiency) * new_in_bed
                 eff_denominator += new_in_bed
             if eff_denominator > 0:
                 merged_efficiency = Decimal(str(round(eff_numerator / eff_denominator, 2)))
@@ -907,6 +915,7 @@ class EventRecordService(
         data = []
         for record, data_source in records:
             details: SleepDetails | None = record.sleep_detail
+            efficiency = _valid_sleep_efficiency(details.sleep_efficiency_score if details else None)
 
             sleep_duration_seconds = (
                 details.sleep_total_duration_minutes * 60
@@ -921,9 +930,7 @@ class EventRecordService(
                 source=self._map_source(data_source),
                 duration_seconds=record.duration_seconds or 0,
                 sleep_duration_seconds=sleep_duration_seconds,
-                efficiency_percent=float(details.sleep_efficiency_score)
-                if details and details.sleep_efficiency_score
-                else None,
+                efficiency_percent=float(efficiency) if efficiency is not None else None,
                 is_nap=details.is_nap if (details and details.is_nap is not None) else False,
                 sleep_stage_intervals=details.sleep_stages if details else None,
                 stages=SleepStagesSummary(
