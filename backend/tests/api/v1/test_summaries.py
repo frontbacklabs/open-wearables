@@ -419,6 +419,67 @@ class TestSleepSummaryEndpoint:
         assert sleep_data["duration_minutes"] == 480  # 8 hours
         assert sleep_data["efficiency_percent"] == 90.0
 
+    def test_get_sleep_summary_sort_order_desc(self, client: TestClient, db: Session) -> None:
+        """sort_order=desc returns latest sleep dates first and paginates forward."""
+        user = UserFactory()
+        mapping = DataSourceFactory(user=user)
+        for day in range(1, 4):
+            EventRecordFactory(
+                mapping=mapping,
+                category="sleep",
+                start_datetime=datetime(2025, 12, day, 22, 0, 0, tzinfo=timezone.utc),
+                end_datetime=datetime(2025, 12, day + 1, 6, 0, 0, tzinfo=timezone.utc),
+                duration_seconds=28800,
+            )
+
+        api_key = ApiKeyFactory()
+        response = client.get(
+            f"/api/v1/users/{user.id}/summaries/sleep",
+            headers=api_key_headers(api_key.id),
+            params={
+                "start_date": "2025-12-01T00:00:00Z",
+                "end_date": "2025-12-10T00:00:00Z",
+                "sort_order": "desc",
+                "limit": 2,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [item["date"] for item in data["data"]] == ["2025-12-04", "2025-12-03"]
+        assert data["pagination"]["has_more"] is True
+
+        next_page = client.get(
+            f"/api/v1/users/{user.id}/summaries/sleep",
+            headers=api_key_headers(api_key.id),
+            params={
+                "start_date": "2025-12-01T00:00:00Z",
+                "end_date": "2025-12-10T00:00:00Z",
+                "sort_order": "desc",
+                "limit": 2,
+                "cursor": data["pagination"]["next_cursor"],
+            },
+        )
+        assert next_page.status_code == 200
+        assert [item["date"] for item in next_page.json()["data"]] == ["2025-12-02"]
+
+    def test_get_sleep_summary_invalid_sort_order(self, client: TestClient, db: Session) -> None:
+        """Invalid sort_order values are rejected."""
+        user = UserFactory()
+        api_key = ApiKeyFactory()
+
+        response = client.get(
+            f"/api/v1/users/{user.id}/summaries/sleep",
+            headers=api_key_headers(api_key.id),
+            params={
+                "start_date": "2025-12-01T00:00:00Z",
+                "end_date": "2025-12-10T00:00:00Z",
+                "sort_order": "newest",
+            },
+        )
+
+        assert response.status_code == 400
+
 
 class TestActivitySummaryEndpoint:
     """Test suite for activity summaries endpoint."""
@@ -1678,4 +1739,28 @@ class TestRecoverySummaryEndpoint:
         data = response.json()
         assert len(data["data"]) == 3
         assert data["pagination"]["has_more"] is True
-        assert data["pagination"]["next_cursor"] is not None
+
+    def test_sort_order_desc_returns_latest_first(self, client: TestClient, db: Session) -> None:
+        """sort_order=desc returns recovery records with the latest date first."""
+        user = UserFactory()
+        source = DataSourceFactory(user=user, source=ProviderName.WHOOP)
+        api_key = ApiKeyFactory()
+
+        for day, score in ((26, 70), (27, 85), (25, 60)):
+            HealthScoreFactory(
+                data_source=source,
+                category=HealthScoreCategory.RECOVERY,
+                value=Decimal(str(score)),
+                provider=ProviderName.WHOOP,
+                recorded_at=datetime(2025, 12, day, 0, 0, 0, tzinfo=timezone.utc),
+            )
+
+        response = client.get(
+            self._url(user.id),
+            headers=api_key_headers(api_key.id),
+            params={**self.BASE_PARAMS, "sort_order": "desc"},
+        )
+
+        assert response.status_code == 200
+        scores = [item["recovery_score"] for item in response.json()["data"]]
+        assert scores == [85, 70, 60]

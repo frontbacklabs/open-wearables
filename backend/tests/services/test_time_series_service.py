@@ -9,6 +9,7 @@ Tests cover:
 """
 
 from datetime import datetime, timedelta, timezone
+from typing import Any, Literal
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -17,6 +18,7 @@ from app.schemas.enums import SeriesType
 from app.schemas.model_crud.activities import (
     HeartRateSampleCreate,
     StepSampleCreate,
+    TimeSeriesQueryParams,
     TimeSeriesSampleCreate,
 )
 from app.services.timeseries_service import timeseries_service
@@ -309,3 +311,98 @@ class TestTimeSeriesServiceGetCountInRange:
 
         # Assert
         assert count == 0
+
+
+class TestTimeSeriesServiceGetTimeseries:
+    """Test get_timeseries ordering and cursor pagination."""
+
+    def _make_samples(self, user: Any, count: int = 5) -> list[datetime]:
+        """Create `count` heart-rate samples spaced 1 minute apart (ascending)."""
+        data_source = DataSourceFactory(user=user, source="apple")
+        series_type = SeriesTypeDefinitionFactory.get_or_create_heart_rate()
+        base = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        timestamps = []
+        for i in range(count):
+            ts = base + timedelta(minutes=i)
+            DataPointSeriesFactory(data_source=data_source, series_type=series_type, recorded_at=ts)
+            timestamps.append(ts)
+        return timestamps
+
+    def _fetch(
+        self,
+        db: Session,
+        user_id: str,
+        cursor: str | None = None,
+        sort_order: Literal["asc", "desc"] = "asc",
+        limit: int = 2,
+    ) -> Any:
+        params = TimeSeriesQueryParams(
+            start_datetime=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            limit=limit,
+            cursor=cursor,
+            sort_order=sort_order,
+        )
+        return timeseries_service.get_timeseries(db, user_id, [SeriesType.heart_rate], params)
+
+    def test_asc_returns_earliest_first(self, db: Session) -> None:
+        """Default (asc) ordering returns the earliest samples on the first page."""
+        user = UserFactory()
+        timestamps = self._make_samples(user, count=3)
+
+        result = self._fetch(db, user.id, limit=10)
+
+        assert [s.timestamp for s in result.data] == timestamps
+        assert result.pagination.has_more is False
+
+    def test_desc_returns_latest_first(self, db: Session) -> None:
+        """sort_order=desc returns the latest samples on the first page."""
+        user = UserFactory()
+        timestamps = self._make_samples(user, count=3)
+
+        result = self._fetch(db, user.id, sort_order="desc", limit=10)
+
+        assert [s.timestamp for s in result.data] == list(reversed(timestamps))
+        assert result.pagination.has_more is False
+
+    def test_desc_paginates_forward_and_backward(self, db: Session) -> None:
+        """Cursor pagination follows the requested sort order in both directions."""
+        user = UserFactory()
+        timestamps = self._make_samples(user, count=5)
+
+        page1 = self._fetch(db, user.id, sort_order="desc")
+        assert [s.timestamp for s in page1.data] == [timestamps[4], timestamps[3]]
+        assert page1.pagination.has_more is True
+        assert page1.pagination.previous_cursor is None
+
+        page2 = self._fetch(db, user.id, cursor=page1.pagination.next_cursor, sort_order="desc")
+        assert [s.timestamp for s in page2.data] == [timestamps[2], timestamps[1]]
+        assert page2.pagination.next_cursor is not None
+        assert page2.pagination.previous_cursor is not None
+
+        page3 = self._fetch(db, user.id, cursor=page2.pagination.next_cursor, sort_order="desc")
+        assert [s.timestamp for s in page3.data] == [timestamps[0]]
+        assert page3.pagination.has_more is False
+
+        back2 = self._fetch(db, user.id, cursor=page3.pagination.previous_cursor, sort_order="desc")
+        assert [s.timestamp for s in back2.data] == [timestamps[2], timestamps[1]]
+        assert back2.pagination.next_cursor is not None
+        assert back2.pagination.previous_cursor is not None
+
+        back1 = self._fetch(db, user.id, cursor=back2.pagination.previous_cursor, sort_order="desc")
+        assert [s.timestamp for s in back1.data] == [timestamps[4], timestamps[3]]
+        assert back1.pagination.previous_cursor is None
+        assert back1.pagination.next_cursor is not None
+
+    def test_asc_backward_page_exposes_next_cursor(self, db: Session) -> None:
+        """Pages reached via previous_cursor always expose next_cursor to page forward again."""
+        user = UserFactory()
+        timestamps = self._make_samples(user, count=3)
+
+        page1 = self._fetch(db, user.id, sort_order="asc")
+        page2 = self._fetch(db, user.id, cursor=page1.pagination.next_cursor, sort_order="asc")
+
+        back1 = self._fetch(db, user.id, cursor=page2.pagination.previous_cursor, sort_order="asc")
+
+        assert [s.timestamp for s in back1.data] == [timestamps[0], timestamps[1]]
+        assert back1.pagination.next_cursor is not None

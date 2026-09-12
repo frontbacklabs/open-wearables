@@ -49,11 +49,12 @@ def get_sleep_summary(
     _api_key: ApiKeyDep,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    sort_order: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
 ) -> PaginatedResponse[SleepSummary]:
     """Returns daily sleep metrics."""
     start_datetime = parse_query_datetime(start_date)
     end_datetime = parse_query_datetime(end_date)
-    return summaries_service.get_sleep_summaries(db, user_id, start_datetime, end_datetime, cursor, limit)
+    return summaries_service.get_sleep_summaries(db, user_id, start_datetime, end_datetime, cursor, limit, sort_order)
 
 
 @router.get("/users/{user_id}/summaries/recovery")
@@ -65,6 +66,7 @@ def get_recovery_summary(
     _api_key: ApiKeyDep,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    sort_order: Annotated[str, Query(pattern="^(asc|desc)$")] = "asc",
 ) -> PaginatedResponse[RecoverySummary]:
     """Returns daily recovery metrics (recovery score, HRV, resting HR, SpO2).
 
@@ -79,7 +81,9 @@ def get_recovery_summary(
     """
     start_datetime = parse_query_datetime(start_date)
     end_datetime = parse_query_datetime(end_date)
-    return summaries_service.get_recovery_summaries(db, user_id, start_datetime, end_datetime, cursor, limit)
+    return summaries_service.get_recovery_summaries(
+        db, user_id, start_datetime, end_datetime, cursor, limit, sort_order
+    )
 
 
 @router.get("/users/{user_id}/summaries/body")

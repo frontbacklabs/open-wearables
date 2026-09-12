@@ -106,6 +106,7 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
         end_date: datetime,
         cursor: str | None,
         limit: int,
+        sort_order: str = "asc",
     ) -> list[dict[str, Any]]:
         """Get recovery health scores for a date range with cursor-based pagination.
 
@@ -113,7 +114,8 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
         device_type, record_id, recorded_at, recovery_score, resting_heart_rate,
         hrv_rmssd_milli, spo2_percentage.
         Fetches limit+1 rows so callers can detect has_more without a separate COUNT query.
-        Ordering matches get_sleep_summaries: ASC by default, DESC when paginating backward.
+        Ordering matches get_sleep_summaries: `sort_order` for first page / forward
+        pagination, reversed when paginating backward.
         """
         # Outer join so scores without a data_source (older rows) still come back.
         query = (
@@ -127,18 +129,33 @@ class HealthScoreRepository(CrudRepository[HealthScore, HealthScoreCreate, Healt
             )
         )
 
+        is_asc = sort_order == "asc"
         if cursor:
             cursor_ts, cursor_id, direction = decode_cursor(cursor)
             if direction == "prev":
-                query = query.filter(tuple_(HealthScore.recorded_at, HealthScore.id) < (cursor_ts, cursor_id)).order_by(
-                    desc(HealthScore.recorded_at), desc(HealthScore.id)
+                # Backward pagination: get items BEFORE cursor (in sort order)
+                comparison = (
+                    tuple_(HealthScore.recorded_at, HealthScore.id) < (cursor_ts, cursor_id)
+                    if is_asc
+                    else tuple_(HealthScore.recorded_at, HealthScore.id) > (cursor_ts, cursor_id)
+                )
+                # Reverse sort order for backward pagination
+                backward_order = desc if is_asc else asc
+                query = query.filter(comparison).order_by(
+                    backward_order(HealthScore.recorded_at), backward_order(HealthScore.id)
                 )
             else:
-                query = query.filter(tuple_(HealthScore.recorded_at, HealthScore.id) > (cursor_ts, cursor_id)).order_by(
-                    asc(HealthScore.recorded_at), asc(HealthScore.id)
+                # Forward pagination: get items AFTER cursor (in sort order)
+                comparison = (
+                    tuple_(HealthScore.recorded_at, HealthScore.id) > (cursor_ts, cursor_id)
+                    if is_asc
+                    else tuple_(HealthScore.recorded_at, HealthScore.id) < (cursor_ts, cursor_id)
                 )
+                order = asc if is_asc else desc
+                query = query.filter(comparison).order_by(order(HealthScore.recorded_at), order(HealthScore.id))
         else:
-            query = query.order_by(asc(HealthScore.recorded_at), asc(HealthScore.id))
+            order = asc if is_asc else desc
+            query = query.order_by(order(HealthScore.recorded_at), order(HealthScore.id))
 
         rows = query.limit(limit + 1).all()
 

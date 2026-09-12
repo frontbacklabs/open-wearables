@@ -164,23 +164,19 @@ class TimeSeriesService(
         previous_cursor = None
 
         if samples:
-            # Always generate next_cursor if has_more
-            if has_more:
-                last_sample = samples[-1][0]
-                next_cursor = encode_cursor(last_sample.recorded_at, last_sample.id, "next")
+            last_sample = samples[-1][0]
+            first_sample = samples[0][0]
 
-            # Generate previous_cursor only if:
-            # 1. We used a cursor to get here (not the first page)
-            # 2. There are more items before (for backward) OR we're doing forward navigation
-            if params.cursor:
-                # For backward navigation: only set previous_cursor if has_more
-                # For forward navigation: always set previous_cursor
-                if is_backward:
-                    if has_more:
-                        first_sample = samples[0][0]
-                        previous_cursor = encode_cursor(first_sample.recorded_at, first_sample.id, "prev")
-                else:
-                    first_sample = samples[0][0]
+            if is_backward:
+                # We came from a later page, so a next page always exists
+                next_cursor = encode_cursor(last_sample.recorded_at, last_sample.id, "next")
+                if has_more:
+                    previous_cursor = encode_cursor(first_sample.recorded_at, first_sample.id, "prev")
+            else:
+                if has_more:
+                    next_cursor = encode_cursor(last_sample.recorded_at, last_sample.id, "next")
+                # Previous cursor only if we used a cursor to get here (not the first page)
+                if params.cursor:
                     previous_cursor = encode_cursor(first_sample.recorded_at, first_sample.id, "prev")
 
         # Map to response format

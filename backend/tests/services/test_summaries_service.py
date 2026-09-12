@@ -8,13 +8,14 @@ from uuid import UUID
 import pytest
 from sqlalchemy.orm import Session
 
-from app.schemas.enums import DeviceType, ProviderName
+from app.schemas.enums import DeviceType, HealthScoreCategory, ProviderName
 from app.services.priority_service import priority_service
 from app.services.summaries_service import SummariesService
 from tests.factories import (
     DataPointSeriesFactory,
     DataSourceFactory,
     EventRecordFactory,
+    HealthScoreFactory,
     PersonalRecordFactory,
     SeriesTypeDefinitionFactory,
     SleepDetailsFactory,
@@ -542,6 +543,48 @@ class TestGetSleepSummaries:
             summary.model_dump() for summary in second_page.data
         ]
 
+    def test_sort_order_desc_paginates_forward_and_backward(self, db: Session, service: SummariesService) -> None:
+        user = UserFactory()
+        ds = DataSourceFactory(user=user, provider=ProviderName.GARMIN, source="garmin")
+        for day in range(1, 6):
+            EventRecordFactory(
+                data_source=ds,
+                category="sleep",
+                type="sleep",
+                start_datetime=_dt(f"2026-01-{day:02d}T23:00:00+00:00"),
+                end_datetime=_dt(f"2026-01-{day + 1:02d}T07:00:00+00:00"),
+                duration_seconds=8 * 3600,
+                zone_offset="+00:00",
+            )
+
+        start = _dt("2026-01-01T00:00:00+00:00")
+        end = _dt("2026-01-10T00:00:00+00:00")
+
+        first_page = service.get_sleep_summaries(db, user.id, start, end, cursor=None, limit=3, sort_order="desc")
+        assert [summary.date for summary in first_page.data] == [
+            date(2026, 1, 6),
+            date(2026, 1, 5),
+            date(2026, 1, 4),
+        ]
+        assert first_page.pagination.has_more is True
+
+        second_page = service.get_sleep_summaries(
+            db, user.id, start, end, cursor=first_page.pagination.next_cursor, limit=3, sort_order="desc"
+        )
+        assert [summary.date for summary in second_page.data] == [date(2026, 1, 3), date(2026, 1, 2)]
+        assert second_page.pagination.has_more is False
+
+        backward_page = service.get_sleep_summaries(
+            db, user.id, start, end, cursor=second_page.pagination.previous_cursor, limit=3, sort_order="desc"
+        )
+        assert [summary.date for summary in backward_page.data] == [
+            date(2026, 1, 6),
+            date(2026, 1, 5),
+            date(2026, 1, 4),
+        ]
+        assert backward_page.pagination.next_cursor is not None
+        assert backward_page.pagination.previous_cursor is None
+
     def test_sleep_summary_ranking_preserves_date_bounds_and_user_scope(
         self, db: Session, service: SummariesService
     ) -> None:
@@ -602,6 +645,43 @@ class TestGetRecoverySummaries:
         summary = result.data[0]
         assert summary.avg_hrv_sdnn_ms is None
         assert summary.avg_hrv_rmssd_ms == 63.2
+
+    def test_sort_order_desc_paginates_forward_and_backward(self, db: Session, service: SummariesService) -> None:
+        user = UserFactory()
+        source = DataSourceFactory(user=user, provider=ProviderName.WHOOP, source="whoop")
+        for day in range(1, 6):
+            HealthScoreFactory(
+                data_source=source,
+                category=HealthScoreCategory.RECOVERY,
+                provider=ProviderName.WHOOP,
+                recorded_at=_dt(f"2026-01-{day:02d}T00:00:00+00:00"),
+            )
+
+        start = _dt("2026-01-01T00:00:00+00:00")
+        end = _dt("2026-01-10T00:00:00+00:00")
+
+        first_page = service.get_recovery_summaries(db, user.id, start, end, None, 2, "desc")
+        assert [summary.date for summary in first_page.data] == [date(2026, 1, 5), date(2026, 1, 4)]
+        assert first_page.pagination.has_more is True
+
+        second_page = service.get_recovery_summaries(
+            db, user.id, start, end, first_page.pagination.next_cursor, 2, "desc"
+        )
+        assert [summary.date for summary in second_page.data] == [date(2026, 1, 3), date(2026, 1, 2)]
+        assert second_page.pagination.has_more is True
+
+        third_page = service.get_recovery_summaries(
+            db, user.id, start, end, second_page.pagination.next_cursor, 2, "desc"
+        )
+        assert [summary.date for summary in third_page.data] == [date(2026, 1, 1)]
+        assert third_page.pagination.has_more is False
+
+        backward_page = service.get_recovery_summaries(
+            db, user.id, start, end, third_page.pagination.previous_cursor, 2, "desc"
+        )
+        assert [summary.date for summary in backward_page.data] == [date(2026, 1, 3), date(2026, 1, 2)]
+        assert backward_page.pagination.next_cursor is not None
+        assert backward_page.pagination.previous_cursor is not None
 
 
 # ---------------------------------------------------------------------------

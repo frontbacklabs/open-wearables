@@ -185,6 +185,7 @@ GET /api/v1/users/{user_id}/timeseries?cursor=abc123&limit=50
 |-----------|---------|-------------|
 | `cursor` | null | Cursor from previous response |
 | `limit` | 50 | Items per page (max: 100) |
+| `sort_order` | `asc` | `asc` returns earliest data first, `desc` returns latest first |
 
 Use the `next_cursor` from the response to fetch the next page.
 

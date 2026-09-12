@@ -19,6 +19,7 @@ from sqlalchemy import (
     asc,
     case,
     cast,
+    desc,
     func,
     literal_column,
     text,
@@ -356,28 +357,40 @@ class DataPointSeriesRepository(
         # This gives us the total matching records (after all other filters)
         total_count = query.count()
 
+        is_asc = params.sort_order == "asc"
+
         # Cursor pagination (keyset)
         if params.cursor:
             cursor_ts, cursor_id, direction = decode_cursor(params.cursor)
 
             if direction == "prev":
-                # Backward pagination: get items BEFORE cursor
-                query = query.filter(
-                    tuple_(self.model.recorded_at, self.model.id) < (cursor_ts, cursor_id),
+                # Backward pagination: get items BEFORE cursor (in sort order)
+                comparison = (
+                    tuple_(self.model.recorded_at, self.model.id) < (cursor_ts, cursor_id)
+                    if is_asc
+                    else tuple_(self.model.recorded_at, self.model.id) > (cursor_ts, cursor_id)
                 )
-                query = query.order_by(self.model.recorded_at.desc(), self.model.id.desc())
+                query = query.filter(comparison)
+
+                # Reverse sort order for backward pagination
+                backward_order = desc if is_asc else asc
+                query = query.order_by(backward_order(self.model.recorded_at), backward_order(self.model.id))
                 # Limit + 1 to check for previous page
                 limit = params.limit or 50
                 results = query.limit(limit + 1).all()
                 # Reverse to get correct order
                 return list(reversed(results)), total_count  # ty:ignore[invalid-return-type]
-            # Forward pagination: get items AFTER cursor
-            query = query.filter(
-                tuple_(self.model.recorded_at, self.model.id) > (cursor_ts, cursor_id),
+            # Forward pagination: get items AFTER cursor (in sort order)
+            comparison = (
+                tuple_(self.model.recorded_at, self.model.id) > (cursor_ts, cursor_id)
+                if is_asc
+                else tuple_(self.model.recorded_at, self.model.id) < (cursor_ts, cursor_id)
             )
+            query = query.filter(comparison)
 
-        # Normal ascending order for forward pagination
-        query = query.order_by(asc(self.model.recorded_at), asc(self.model.id))
+        # Forward sort order for first page / forward pagination
+        sort_order = asc if is_asc else desc
+        query = query.order_by(sort_order(self.model.recorded_at), sort_order(self.model.id))
 
         # Limit + 1 to check for next page
         limit = params.limit or 50

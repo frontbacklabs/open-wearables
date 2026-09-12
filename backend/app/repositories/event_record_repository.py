@@ -555,6 +555,7 @@ class EventRecordRepository(
         limit: int,
         provider_order: dict[ProviderName, int],
         device_type_order: dict[DeviceType, int],
+        sort_order: str = "asc",
     ) -> list[dict]:
         """Get daily sleep summaries aggregated by date, source, and device_model.
 
@@ -813,21 +814,36 @@ class EventRecordRepository(
         ).outerjoin(physio_lateral, true())
 
         # Handle cursor pagination
+        is_asc = sort_order == "asc"
         if cursor:
             cursor_ts, cursor_id, direction = decode_cursor(cursor)
             cursor_date = cursor_ts.date()
 
             if direction == "prev":
-                # Backward pagination: get items BEFORE cursor
-                query = query.filter(tuple_(winning_summaries.c.sleep_date, record_id_col) < (cursor_date, cursor_id))
-                query = query.order_by(desc(winning_summaries.c.sleep_date), desc(record_id_col))
+                # Backward pagination: get items BEFORE cursor (in sort order)
+                comparison = (
+                    tuple_(winning_summaries.c.sleep_date, record_id_col) < (cursor_date, cursor_id)
+                    if is_asc
+                    else tuple_(winning_summaries.c.sleep_date, record_id_col) > (cursor_date, cursor_id)
+                )
+                # Reverse sort order for backward pagination
+                backward_order = desc if is_asc else asc
+                query = query.filter(comparison).order_by(
+                    backward_order(winning_summaries.c.sleep_date), backward_order(record_id_col)
+                )
             else:
-                # Forward pagination: get items AFTER cursor
-                query = query.filter(tuple_(winning_summaries.c.sleep_date, record_id_col) > (cursor_date, cursor_id))
-                query = query.order_by(asc(winning_summaries.c.sleep_date), asc(record_id_col))
+                # Forward pagination: get items AFTER cursor (in sort order)
+                comparison = (
+                    tuple_(winning_summaries.c.sleep_date, record_id_col) > (cursor_date, cursor_id)
+                    if is_asc
+                    else tuple_(winning_summaries.c.sleep_date, record_id_col) < (cursor_date, cursor_id)
+                )
+                order = asc if is_asc else desc
+                query = query.filter(comparison).order_by(order(winning_summaries.c.sleep_date), order(record_id_col))
         else:
-            # No cursor: default ordering
-            query = query.order_by(asc(winning_summaries.c.sleep_date), asc(record_id_col))
+            # No cursor: first page in requested sort order
+            order = asc if is_asc else desc
+            query = query.order_by(order(winning_summaries.c.sleep_date), order(record_id_col))
 
         # Limit + 1 to check for has_more
         results = query.limit(limit + 1).all()

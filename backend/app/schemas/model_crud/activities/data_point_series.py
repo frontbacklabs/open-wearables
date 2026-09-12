@@ -76,3 +76,4 @@ class TimeSeriesQueryParams(BaseModel):
         None,
         description="Pagination cursor (use next_cursor for forward, previous_cursor for backward)",
     )
+    sort_order: Literal["asc", "desc"] = Field("asc", description="Sort order")

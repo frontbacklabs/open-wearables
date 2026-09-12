@@ -192,6 +192,7 @@ export interface TimeSeriesParams {
   resolution?: 'raw' | '1min' | '5min' | '15min' | '1hour';
   cursor?: string;
   limit?: number;
+  sort_order?: 'asc' | 'desc';
   [key: string]: string | string[] | number | undefined;
 }
 

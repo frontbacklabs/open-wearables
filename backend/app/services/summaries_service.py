@@ -252,6 +252,7 @@ class SummariesService:
         end_date: datetime,
         cursor: str | None,
         limit: int,
+        sort_order: str = "asc",
     ) -> PaginatedResponse[SleepSummary]:
         """Get daily sleep summaries aggregated by date, provider, and device."""
         self.logger.debug(f"Fetching sleep summaries for user {user_id} from {start_date} to {end_date}")
@@ -268,6 +269,7 @@ class SummariesService:
             limit,
             provider_order,
             device_type_order,
+            sort_order,
         )
 
         # Check if there's more data
@@ -401,14 +403,16 @@ class SummariesService:
         end_date: datetime,
         cursor: str | None,
         limit: int,
+        sort_order: str = "asc",
     ) -> PaginatedResponse[RecoverySummary]:
         """Get daily recovery summaries from HealthScore(RECOVERY) records.
 
         Metrics come from the components JSONB stored alongside the recovery score:
         resting_heart_rate, hrv_rmssd_milli, spo2_percentage.
         """
+        cursor_direction = decode_cursor(cursor)[2] if cursor else "next"
         results = self.health_score_repo.get_recovery_summaries(
-            db_session, user_id, start_date, end_date, cursor, limit
+            db_session, user_id, start_date, end_date, cursor, limit, sort_order
         )
 
         results = self._filter_by_priority(db_session, user_id, results, date_key="recovery_date")
@@ -416,18 +420,25 @@ class SummariesService:
         has_more = len(results) > limit
         if has_more:
             results = results[:limit]
+        if cursor_direction == "prev":
+            results.reverse()
 
         next_cursor: str | None = None
         previous_cursor: str | None = None
 
         if results:
             last_result = results[-1]
-            if has_more:
+            first_result = results[0]
+            if cursor_direction == "prev":
+                # We came from a later page, so a next page always exists
                 next_cursor = encode_cursor(last_result["recorded_at"], last_result["record_id"], "next")
-
-            if cursor:
-                first_result = results[0]
-                previous_cursor = encode_cursor(first_result["recorded_at"], first_result["record_id"], "prev")
+                if has_more:
+                    previous_cursor = encode_cursor(first_result["recorded_at"], first_result["record_id"], "prev")
+            else:
+                if has_more:
+                    next_cursor = encode_cursor(last_result["recorded_at"], last_result["record_id"], "next")
+                if cursor:
+                    previous_cursor = encode_cursor(first_result["recorded_at"], first_result["record_id"], "prev")
 
         data = [
             RecoverySummary(

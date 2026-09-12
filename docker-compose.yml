@@ -29,6 +29,9 @@ services:
       - ./backend/config/.env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-open-wearables}
+      - DB_PASSWORD=${DB_PASSWORD:-open-wearables}
       - REDIS_HOST=redis
     ports:
       - "${API_PORT:-8000}:8000"
@@ -67,6 +70,9 @@ services:
       - ./backend/config/.env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-open-wearables}
+      - DB_PASSWORD=${DB_PASSWORD:-open-wearables}
       - REDIS_HOST=redis
     depends_on:
       - redis
@@ -90,6 +96,9 @@ services:
       - ./backend/config/.env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-open-wearables}
+      - DB_PASSWORD=${DB_PASSWORD:-open-wearables}
       - REDIS_HOST=redis
     depends_on:
       - redis
@@ -113,6 +122,9 @@ services:
       - ./backend/config/.env
     environment:
       - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-open-wearables}
+      - DB_PASSWORD=${DB_PASSWORD:-open-wearables}
       - REDIS_HOST=redis
     ports:
       - "${FLOWER_PORT:-5555}:5555"
