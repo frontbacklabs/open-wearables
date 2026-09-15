@@ -215,8 +215,11 @@ phases:
           [[ -n "${!variable:-}" ]] || { echo "Missing required CodeBuild variable: $variable" >&2; exit 1; }
         done
         SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
-        IMAGE_TAG="${SOURCE_REVISION:0:7}"
-        [[ "$IMAGE_TAG" =~ ^[0-9A-Fa-f]{7}$ ]] || { echo "The resolved source version must begin with a Git commit SHA" >&2; exit 1; }
+        [[ "${SOURCE_REVISION:0:7}" =~ ^[0-9A-Fa-f]{7}$ ]] || { echo "The resolved source version must begin with a Git commit SHA" >&2; exit 1; }
+        # The ECR repos use immutable tags (only "latest" is overwritable), so
+        # a re-run of this pipeline on the same commit cannot repush the bare
+        # SHA tag — append the build number to keep every push unique.
+        IMAGE_TAG="${SOURCE_REVISION:0:7}-${CODEBUILD_BUILD_NUMBER:?CODEBUILD_BUILD_NUMBER is required}"
         AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
         ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
         for repository in \
@@ -240,7 +243,7 @@ phases:
       - |
         set -euo pipefail
         SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
-        IMAGE_TAG="${SOURCE_REVISION:0:7}"
+        IMAGE_TAG="${SOURCE_REVISION:0:7}-${CODEBUILD_BUILD_NUMBER:?CODEBUILD_BUILD_NUMBER is required}"
         AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
         ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
 
@@ -282,7 +285,7 @@ phases:
       - |
         set -euo pipefail
         SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
-        IMAGE_TAG="${SOURCE_REVISION:0:7}"
+        IMAGE_TAG="${SOURCE_REVISION:0:7}-${CODEBUILD_BUILD_NUMBER:?CODEBUILD_BUILD_NUMBER is required}"
         AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
         ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
 
@@ -508,7 +511,7 @@ phases:
           local target_group="${7:-}"
           local container_port="${8:-}"
           local health_grace="${9:-60}"
-          local network_configuration private_subnets status running
+          local network_configuration private_subnets status running rollout
           local -a create_arguments update_arguments
           private_subnets="${ECS_PRIVATE_SUBNETS//[[:space:]]/}"
           network_configuration="awsvpcConfiguration={subnets=[$private_subnets],securityGroups=[$security_group],assignPublicIp=DISABLED}"
@@ -572,18 +575,26 @@ phases:
           # deployment keeps the new task def ARN while its rolloutState is FAILED
           # and the service drains to zero, so the rollout state must be checked
           # too, not just the task definition.
-          running="$(aws ecs describe-services --region "$DEPLOY_REGION" \
-            --cluster "$ECS_CLUSTER" --services "$service" \
-            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' \
-            --output text)"
-          rollout="$(aws ecs describe-services --region "$DEPLOY_REGION" \
-            --cluster "$ECS_CLUSTER" --services "$service" \
-            --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
-            --output text)"
-          [[ "$running" == "$task_definition" && "$rollout" == "COMPLETED" ]] || {
-            echo "ECS service $service rollout is $rollout on $running (wanted $task_definition COMPLETED)" >&2
-            return 1
-          }
+          # rolloutState flips to COMPLETED asynchronously — it can still read
+          # IN_PROGRESS for a short window after services-stable returns, so
+          # poll it briefly rather than checking once.
+          local deadline=$((SECONDS + 120))
+          while :; do
+            running="$(aws ecs describe-services --region "$DEPLOY_REGION" \
+              --cluster "$ECS_CLUSTER" --services "$service" \
+              --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' \
+              --output text)"
+            rollout="$(aws ecs describe-services --region "$DEPLOY_REGION" \
+              --cluster "$ECS_CLUSTER" --services "$service" \
+              --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
+              --output text)"
+            [[ "$running" == "$task_definition" && "$rollout" == "COMPLETED" ]] && break
+            if [[ "$rollout" == "FAILED" || "$running" != "$task_definition" || $SECONDS -ge $deadline ]]; then
+              echo "ECS service $service rollout is $rollout on $running (wanted $task_definition COMPLETED)" >&2
+              return 1
+            fi
+            sleep 5
+          done
         }
 
         ensure_log_group "$BACKEND_LOG_GROUP"
