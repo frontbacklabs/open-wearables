@@ -149,12 +149,14 @@ env:
     DB_HOST: "open-wearables-db-cluster.cluster-c8d2euw82e47.us-east-1.rds.amazonaws.com"
     DB_PORT: "5432"
     DB_NAME: open-wearables
-    # ElastiCache Valkey Serverless endpoint. Serverless requires in-transit
-    # encryption, so REDIS_SSL stays true (Settings.redis_url switches to
-    # rediss://); the cache has no auth token, so no REDIS_PASSWORD is wired.
-    REDIS_HOST: "open-wearables-db-cache-xyn3ho.serverless.use1.cache.amazonaws.com"
+    # ElastiCache node-based Valkey (open-wearables-cache, cluster mode OFF).
+    # Serverless cannot be used: it is always cluster-mode, and neither Celery's
+    # kombu transport (CROSSSLOT on multi-key ops) nor the app's plain redis-py
+    # client (MOVED redirects) works against it. No TLS/AUTH — same posture as
+    # the GCE Redis it replaces; REDIS_PASSWORD stays unwired.
+    REDIS_HOST: "open-wearables-cache.xyn3ho.ng.0001.use1.cache.amazonaws.com"
     REDIS_PORT: "6379"
-    REDIS_SSL: "true"
+    REDIS_SSL: "false"
     # Public API origin (api.ren.so -> ren-mas-alb -> path rule -> backend TG).
     # Must stay public: provider OAuth redirect URIs and webhook registration
     # URLs are built from it and are followed by phones/provider servers, not
@@ -566,12 +568,20 @@ phases:
           # The circuit breaker rolls a failed deployment back to the previous task
           # definition, which still satisfies services-stable; fail the build unless
           # the service is actually running the revision this pipeline registered.
+          # On a FIRST deploy there is no revision to roll back to — the PRIMARY
+          # deployment keeps the new task def ARN while its rolloutState is FAILED
+          # and the service drains to zero, so the rollout state must be checked
+          # too, not just the task definition.
           running="$(aws ecs describe-services --region "$DEPLOY_REGION" \
             --cluster "$ECS_CLUSTER" --services "$service" \
             --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' \
             --output text)"
-          [[ "$running" == "$task_definition" ]] || {
-            echo "ECS service $service stabilized on $running, not $task_definition" >&2
+          rollout="$(aws ecs describe-services --region "$DEPLOY_REGION" \
+            --cluster "$ECS_CLUSTER" --services "$service" \
+            --query 'services[0].deployments[?status==`PRIMARY`].rolloutState | [0]' \
+            --output text)"
+          [[ "$running" == "$task_definition" && "$rollout" == "COMPLETED" ]] || {
+            echo "ECS service $service rollout is $rollout on $running (wanted $task_definition COMPLETED)" >&2
             return 1
           }
         }
