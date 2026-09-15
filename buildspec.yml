@@ -111,15 +111,21 @@ env:
     # open-wearables-cache-sg already grant DB/Valkey ingress from.
     BACKEND_SECURITY_GROUP_ID: sg-020d06900bcccea65
     BACKEND_TARGET_GROUP_ARN: "arn:aws:elasticloadbalancing:us-east-1:948806324983:targetgroup/open-wearables-backend-tg/36e612314bfc6df1"
-    BACKEND_DESIRED_COUNT: "2"
+    BACKEND_DESIRED_COUNT: "1"
     BACKEND_CONTAINER_PORT: "8000"
     BACKEND_LOG_GROUP: /ecs/open-wearables/backend
 
     # Celery worker: long-running service, no inbound HTTP. The container
     # command is overridden to run celery directly — the health server baked
     # into the image's CMD exists only for Cloud Run's $PORT probe.
+    # It gets its own resource profile: backfills (provider historical syncs)
+    # buffer large time-series payloads in memory, so it runs with the
+    # maximum Fargate memory a 1024-CPU task can take (8192 MiB) rather than
+    # the shared ECS_TASK_CPU/ECS_TASK_MEMORY profile.
     WORKER_SERVICE: open-wearables-worker
     WORKER_TASK_FAMILY: open-wearables-worker
+    WORKER_TASK_CPU: "1024"
+    WORKER_TASK_MEMORY: "8192"
     WORKER_DESIRED_COUNT: "1"
     WORKER_LOG_GROUP: /ecs/open-wearables/worker
 
@@ -342,6 +348,10 @@ phases:
           # A non-empty command JSON array overrides the image CMD and drops the
           # service-only port mapping and health check (worker/beat serve no HTTP).
           local command="${10:-[]}"
+          # Optional per-service resource profile; defaults to the shared
+          # ECS_TASK_CPU/ECS_TASK_MEMORY (the worker passes its own).
+          local cpu="${11:-$ECS_TASK_CPU}"
+          local memory="${12:-$ECS_TASK_MEMORY}"
           local current definition_file
           definition_file="$(mktemp)"
 
@@ -358,8 +368,8 @@ phases:
               --arg image "$image" \
               --arg execution_role "$ECS_TASK_EXECUTION_ROLE_ARN" \
               --arg task_role "$task_role" \
-              --arg cpu "$ECS_TASK_CPU" \
-              --arg memory "$ECS_TASK_MEMORY" \
+              --arg cpu "$cpu" \
+              --arg memory "$memory" \
               --arg architecture "$ECS_TASK_ARCHITECTURE" \
               --arg region "$DEPLOY_REGION" \
               --arg log_group "$log_group" \
@@ -438,8 +448,8 @@ phases:
               --arg image "$image" \
               --arg execution_role "$ECS_TASK_EXECUTION_ROLE_ARN" \
               --arg task_role "$task_role" \
-              --arg cpu "$ECS_TASK_CPU" \
-              --arg memory "$ECS_TASK_MEMORY" \
+              --arg cpu "$cpu" \
+              --arg memory "$memory" \
               --arg architecture "$ECS_TASK_ARCHITECTURE" \
               --arg region "$DEPLOY_REGION" \
               --arg log_group "$log_group" \
@@ -733,7 +743,8 @@ phases:
         WORKER_TASK_DEFINITION="$(register_task_definition \
           "$WORKER_TASK_FAMILY" "$WORKER_SERVICE" "$(image_uri "$WORKER_ECR_REPOSITORY")" \
           "$BACKEND_TASK_ROLE_ARN" "$WORKER_LOG_GROUP" "$BACKEND_CONTAINER_PORT" \
-          "" "$WORKER_ENVIRONMENT" "$WORKER_BEAT_SECRETS" "$WORKER_COMMAND")"
+          "" "$WORKER_ENVIRONMENT" "$WORKER_BEAT_SECRETS" "$WORKER_COMMAND" \
+          "$WORKER_TASK_CPU" "$WORKER_TASK_MEMORY")"
         deploy_service "$WORKER_SERVICE" "$WORKER_TASK_DEFINITION" "$WORKER_DESIRED_COUNT" \
           "$BACKEND_SECURITY_GROUP_ID" "" \
           'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100'
