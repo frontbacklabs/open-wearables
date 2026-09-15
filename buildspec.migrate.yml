@@ -1,0 +1,64 @@
+version: 0.2
+
+# Database migration runner — manual CodeBuild project open-wearables-migrate
+# only. The deploy pipeline (buildspec.yml) never runs migrations, and app.sh
+# no longer runs alembic on boot; this project is triggered by hand when an
+# operator decides to move the schema.
+#
+#   aws codebuild start-build --project-name open-wearables-migrate
+#   downgrade: aws codebuild start-build --project-name open-wearables-migrate \
+#     --environment-variables-override \
+#       name=MIGRATION_DIRECTION,value=downgrade \
+#       name=MIGRATION_TARGET,value=-1
+#
+# MIGRATION_DIRECTION (upgrade|downgrade) and MIGRATION_TARGET (any alembic
+# revision: head, -1, -2, <rev-id>, base; empty = head/-1 by direction) are
+# project environment variables — change them per build or on the project.
+#
+# Auth is passwordless: the project runs in the ren-vpc private subnets wearing
+# ren-app-sg (which ren-db-sg already trusts on 5432), mints an RDS IAM auth
+# token for the ow_migration role, and passes it as DB_PASSWORD — settings.db_uri
+# percent-encodes it into a normal postgres URL. The CodeBuild service role
+# carries rds-db:connect on dbuser:cluster-L2PGNRLULKYCB5SJ3BUDVSODYA/ow_migration;
+# no secret is fetched or stored. The token is valid for 15 minutes — the whole
+# upgrade must fit inside that window (true for this schema's size).
+
+env:
+  shell: bash
+  variables:
+    DEPLOY_REGION: ""
+    DB_HOST: "open-wearables-db-cluster.cluster-c8d2euw82e47.us-east-1.rds.amazonaws.com"
+    DB_PORT: "5432"
+    DB_NAME: "open-wearables"
+    DB_USER: "ow_migration"
+    MIGRATION_DIRECTION: upgrade
+    MIGRATION_TARGET: ""
+
+phases:
+  install:
+    commands:
+      - curl -LsSf https://astral.sh/uv/install.sh | sh
+  build:
+    on-failure: ABORT
+    commands:
+      - |
+        set -euo pipefail
+        export PATH="$HOME/.local/bin:$PATH"
+        cd backend
+        uv sync --frozen
+        export DB_PASSWORD="$(aws rds generate-db-auth-token \
+          --hostname "$DB_HOST" --port "$DB_PORT" --username "$DB_USER" \
+          --region "$DEPLOY_REGION")"
+        case "$MIGRATION_DIRECTION" in
+          upgrade)   target="${MIGRATION_TARGET:-head}" ;;
+          downgrade) target="${MIGRATION_TARGET:--1}" ;;
+          *) echo "MIGRATION_DIRECTION must be upgrade or downgrade" >&2; exit 1 ;;
+        esac
+        echo "=== alembic current (before) ==="
+        uv run alembic current || true
+        echo "=== alembic heads ==="
+        uv run alembic heads
+        echo "=== alembic $MIGRATION_DIRECTION $target ==="
+        uv run alembic "$MIGRATION_DIRECTION" "$target"
+        echo "=== alembic current (after) ==="
+        uv run alembic current

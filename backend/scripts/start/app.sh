@@ -5,9 +5,12 @@ set -e -x
 echo 'Ensuring svix database...'
 uv run python scripts/init/create_svix_db.py
 
-# Init database
-echo 'Applying migrations...'
-uv run alembic upgrade head
+# Migrations run only via the manually triggered open-wearables-migrate
+# CodeBuild project (buildspec.migrate.yml) as the ow_migration role over RDS
+# IAM auth — the app role (ow_app) has no DDL rights, so a deploy that needs a
+# schema change must be preceded by a migrate build.
+#
+#   aws codebuild start-build --project-name open-wearables-migrate
 
 # Initialize provider settings
 echo 'Initializing provider settings...'

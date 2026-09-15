@@ -165,12 +165,14 @@ env:
     CORS_ALLOW_ALL: "true"
     API_NAME: "Ren - Open Wearables API"
 
-    # Secrets Manager references. DB credentials come from the OW cluster's
-    # RDS-managed secret (ow_admin); ECS resolves individual JSON keys via
-    # valueFrom "<arn>:<key>::" at task start. The ren-*-client-credentials
-    # secrets are {"client_id","client_secret"} objects. The execution role's
-    # ren-secrets-read policy covers ren-* plus this cluster's managed secret.
-    DB_CREDENTIALS_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:948806324983:secret:rds!cluster-a48eef3e-1dc2-4395-b8e2-81a0f5db8555-wgP8u5"
+    # Secrets Manager references. DB credentials come from the ow_app runtime
+    # role's {"username","password"} secret; ECS resolves individual JSON keys
+    # via valueFrom "<arn>:<key>::" at task start. (ow_admin is rds_iam-only —
+    # its password cannot be used for direct connections — and schema migrations
+    # run as ow_migration via IAM tokens in buildspec.migrate.yml, never here.)
+    # The ren-*-client-credentials secrets are {"client_id","client_secret"}
+    # objects. The execution role's ren-secrets-read policy covers ren-*.
+    DB_CREDENTIALS_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:948806324983:secret:ren-open-wearables-db-app-credentials-ACoApt"
     ADMIN_EMAIL_SECRET: ren-admin-email
     ADMIN_PASSWORD_SECRET: ren-admin-password
     SECRET_KEY_SECRET: ren-owear-secret-key
