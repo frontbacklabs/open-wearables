@@ -1,0 +1,754 @@
+version: 0.2
+
+# CI/CD: build the backend, worker, beat, and frontend images, push them to ECR,
+# and deploy each to ECS Fargate. Ported from cloudbuild.yaml (Cloud Build ->
+# CodeBuild, Artifact Registry -> ECR, Cloud Run -> ECS Fargate, Cloud SQL ->
+# RDS, GCE Redis -> ElastiCache Valkey, Secret Manager -> Secrets Manager).
+#
+# "On commit to main" is configured on the CodeBuild project's source/webhook,
+# not in this file. Project timeout should be >= 30 minutes (was 1800s on Cloud
+# Build).
+#
+# The CodeBuild service role needs: ECR push, ECS register/describe/update,
+# logs:CreateLogGroup, ec2:Describe/AuthorizeSecurityGroupIngress,
+# secretsmanager:DescribeSecret, elbv2:DescribeTargetGroups, iam:PassRole on the
+# task execution and task roles.
+#
+# Runtime env vars reach the tasks two ways:
+#   - Non-secret config via the env variables below (container "environment").
+#   - Secrets via the task definition "secrets" block (valueFrom = Secrets
+#     Manager ARN); ECS resolves them at task start, so the task EXECUTION role
+#     needs secretsmanager:GetSecretValue on each referenced secret.
+#
+# Topology: Open Wearables is VPC-internal plumbing for ren-backend. All four
+# services deploy into a dedicated open-wearables ECS cluster and run in
+# ren-vpc's private subnets wearing ren-app-sg, which ren-db-sg (5432) and
+# open-wearables-cache-sg (6379) already trust.
+#
+# Discovery is Cloud Map private DNS, not Service Connect: the backend and
+# frontend register task IPs in the ren.internal namespace, so
+#   http://open-wearables-backend.ren.internal:8000
+#   http://open-wearables-frontend.ren.internal:3000
+# resolve for anything in the VPC — MAS/DAS tasks, the measurement-cacher
+# (a standalone ecs:RunTask, which cannot use Service Connect), and the
+# jumphost. Set OPEN_WEARABLES_URL in the ren-backend CodeBuild project to the
+# backend URL above.
+#
+# Two deliberate exceptions to "no inbound":
+#   1. api.ren.so (ren-mas-alb) carries two path-scoped listener rules that
+#      forward to BACKEND_TARGET_GROUP_ARN: /api/v1/oauth/* callback/success/
+#      error (the provider-registered OAuth redirect is followed by the user's
+#      phone browser, not by ren-backend) and the provider webhook paths
+#      (/api/v1/providers/*/webhooks, /api/v1/{oura,strava,garmin}/webhook*),
+#      needed only if a provider's live_sync_mode is switched to webhook.
+#      API_BASE_URL must therefore stay the public ALB domain — it is baked
+#      into OAuth redirect URIs and webhook registration URLs.
+#   2. The SSM jumphost SG gets 8000/3000 ingress so admins can reach the API
+#      and dashboard via SSM port-forwarding through ren-ssm-jumphost
+#      (i-0a106a2ce91b2baf9), gated by IAM ssm:StartSession:
+#        aws ssm start-session --target i-0a106a2ce91b2baf9 \
+#          --document-name AWS-StartPortForwardingSessionToRemoteHost \
+#          --parameters "host=open-wearables-frontend.ren.internal,portNumber=3000,localPortNumber=3000"
+#        aws ssm start-session --target i-0a106a2ce91b2baf9 \
+#          --document-name AWS-StartPortForwardingSessionToRemoteHost \
+#          --parameters "host=open-wearables-backend.ren.internal,portNumber=8000,localPortNumber=8000"
+#      (the jumphost resolves the Cloud Map names via VPC DNS — no task IP
+#      lookup needed).
+#      The dashboard calls the API browser-side, so VITE_API_URL is
+#      localhost:8000 and the admin needs both tunnels.
+#
+# Egress: the ren-private-* subnets already route 0.0.0.0/0 through NAT
+# nat-0b840a6e62d2e2ad6, covering wearable-provider OAuth/API calls plus ECR,
+# Secrets Manager, and CloudWatch. No additional egress infra is needed; tasks
+# run with assignPublicIp=DISABLED.
+#
+# RDS/Valkey security-group ingress (ren-db-sg/open-wearables-cache-sg ->
+# ren-app-sg) is infrastructure-side and already provisioned, not managed here.
+#
+# Unlike Cloud Run, Fargate has no scale-to-zero and no per-request concurrency
+# cap: BACKEND_DESIRED_COUNT tasks each hold their own DB pools, so the
+# connection budget below is per task.
+
+env:
+  shell: bash
+  variables:
+    DEPLOY_REGION: ""
+    # Dedicated cluster for the four Open Wearables services; shares the
+    # ren-vpc, ren.internal Cloud Map namespace, and ren-mas-alb with ren-backend.
+    ECS_CLUSTER: open-wearables
+    # Cloud Map services in the ren.internal private DNS namespace — the backend
+    # and frontend register their task IPs here (see header for the URLs).
+    BACKEND_REGISTRY_ARN: "arn:aws:servicediscovery:us-east-1:948806324983:service/srv-4elfpwhc2awt3zc3"
+    FRONTEND_REGISTRY_ARN: "arn:aws:servicediscovery:us-east-1:948806324983:service/srv-sxlgmvrntnijsufr"
+    ECS_PRIVATE_SUBNETS: "subnet-0f712e0039993451d,subnet-072c3c6010bc6bcd9,subnet-094d2d53ee554fb6c"
+    ECS_TASK_EXECUTION_ROLE_ARN: "arn:aws:iam::948806324983:role/ren-ecs-task-execution"
+    ECS_TASK_CPU: "1024"
+    ECS_TASK_MEMORY: "2048"
+    ECS_TASK_ARCHITECTURE: X86_64
+    # ren-mas-alb's security group. The only public path into the backend is
+    # the path-scoped listener rule described in the header, which forwards to
+    # BACKEND_TARGET_GROUP_ARN.
+    ALB_SECURITY_GROUP_ID: sg-0c6977825f9d77d68
+    # Comma-separated security groups allowed to call the backend API
+    # (ren-backend mobile-api and data-access task SGs).
+    BACKEND_CALLER_SECURITY_GROUP_IDS: "sg-0d9fee4d52d42b045,sg-01ac61984853bbab5"
+    # ren-ssm-jumphost: SSM port-forwarding for admin access to the API and
+    # dashboard (see header).
+    ADMIN_SECURITY_GROUP_ID: sg-00a0cd648152a385b
+
+    BACKEND_ECR_REPOSITORY: frontbacklabs/open-wearables-backend
+    WORKER_ECR_REPOSITORY: frontbacklabs/open-wearables-worker
+    BEAT_ECR_REPOSITORY: frontbacklabs/open-wearables-beat
+    FRONTEND_ECR_REPOSITORY: frontbacklabs/open-wearables-frontend
+
+    # Backend API service. The worker and beat share BACKEND_TASK_ROLE_ARN and
+    # BACKEND_SECURITY_GROUP_ID, mirroring the single Cloud Run service account
+    # they shared on GCP.
+    BACKEND_SERVICE: open-wearables-backend
+    BACKEND_TASK_FAMILY: open-wearables-backend
+    BACKEND_TASK_ROLE_ARN: "arn:aws:iam::948806324983:role/open-wearables-task"
+    # ren-app-sg: the shared app-tier SG that ren-db-sg and
+    # open-wearables-cache-sg already grant DB/Valkey ingress from.
+    BACKEND_SECURITY_GROUP_ID: sg-020d06900bcccea65
+    BACKEND_TARGET_GROUP_ARN: "arn:aws:elasticloadbalancing:us-east-1:948806324983:targetgroup/open-wearables-backend-tg/36e612314bfc6df1"
+    BACKEND_DESIRED_COUNT: "2"
+    BACKEND_CONTAINER_PORT: "8000"
+    BACKEND_LOG_GROUP: /ecs/open-wearables/backend
+
+    # Celery worker: long-running service, no inbound HTTP. The container
+    # command is overridden to run celery directly — the health server baked
+    # into the image's CMD exists only for Cloud Run's $PORT probe.
+    WORKER_SERVICE: open-wearables-worker
+    WORKER_TASK_FAMILY: open-wearables-worker
+    WORKER_DESIRED_COUNT: "1"
+    WORKER_LOG_GROUP: /ecs/open-wearables/worker
+
+    # Celery beat: MUST stay a single instance or scheduled tasks fire multiple
+    # times, so it also deploys with maximumPercent=100/minimumHealthyPercent=0
+    # (old task stops before the new one starts — no duplicate window).
+    BEAT_SERVICE: open-wearables-beat
+    BEAT_TASK_FAMILY: open-wearables-beat
+    BEAT_DESIRED_COUNT: "1"
+    BEAT_LOG_GROUP: /ecs/open-wearables/beat
+
+    # Dashboard. Private: reachable only through the SSM jumphost tunnel
+    # described in the header. VITE_API_URL is localhost:8000 because the
+    # dashboard calls the API from the browser through the same tunnel.
+    FRONTEND_SERVICE: open-wearables-frontend
+    FRONTEND_TASK_FAMILY: open-wearables-frontend
+    FRONTEND_TASK_ROLE_ARN: "arn:aws:iam::948806324983:role/open-wearables-task"
+    FRONTEND_SECURITY_GROUP_ID: sg-020d06900bcccea65
+    FRONTEND_DESIRED_COUNT: "1"
+    FRONTEND_CONTAINER_PORT: "3000"
+    FRONTEND_LOG_GROUP: /ecs/open-wearables/frontend
+
+    # --- Backend runtime config (non-secret) ---
+    ENVIRONMENT: production
+    # RDS endpoint hostname. GCP used a Cloud SQL unix socket (/cloudsql/...);
+    # on AWS psycopg connects over TCP, so DB_PORT is required again.
+    DB_HOST: "open-wearables-db-cluster.cluster-c8d2euw82e47.us-east-1.rds.amazonaws.com"
+    DB_PORT: "5432"
+    DB_NAME: open-wearables
+    # ElastiCache Valkey Serverless endpoint. Serverless requires in-transit
+    # encryption, so REDIS_SSL stays true (Settings.redis_url switches to
+    # rediss://); the cache has no auth token, so no REDIS_PASSWORD is wired.
+    REDIS_HOST: "open-wearables-db-cache-xyn3ho.serverless.use1.cache.amazonaws.com"
+    REDIS_PORT: "6379"
+    REDIS_SSL: "true"
+    # Public API origin (api.ren.so -> ren-mas-alb -> path rule -> backend TG).
+    # Must stay public: provider OAuth redirect URIs and webhook registration
+    # URLs are built from it and are followed by phones/provider servers, not
+    # by ren-backend services.
+    API_BASE_URL: "https://api.ren.so"
+    # Dashboard origin for invite links; the dashboard is tunnel-only.
+    FRONTEND_URL: "http://localhost:3000"
+    CORS_ALLOW_ALL: "true"
+    API_NAME: "Ren - Open Wearables API"
+
+    # Secrets Manager references. DB credentials come from the OW cluster's
+    # RDS-managed secret (ow_admin); ECS resolves individual JSON keys via
+    # valueFrom "<arn>:<key>::" at task start. The ren-*-client-credentials
+    # secrets are {"client_id","client_secret"} objects. The execution role's
+    # ren-secrets-read policy covers ren-* plus this cluster's managed secret.
+    DB_CREDENTIALS_SECRET_ARN: "arn:aws:secretsmanager:us-east-1:948806324983:secret:rds!cluster-a48eef3e-1dc2-4395-b8e2-81a0f5db8555-wgP8u5"
+    ADMIN_EMAIL_SECRET: ren-admin-email
+    ADMIN_PASSWORD_SECRET: ren-admin-password
+    SECRET_KEY_SECRET: ren-owear-secret-key
+    WHOOP_CREDENTIALS_SECRET: ren-whoop-client-credentials
+    OURA_CREDENTIALS_SECRET: ren-oura-client-credentials
+    # Google Health API credentials live in the fitbit-named secret (the name
+    # is historical; cloudbuild.yaml mapped it the same way).
+    GOOGLE_CREDENTIALS_SECRET: ren-fitbit-client-credentials
+    # Optional: only used for Google Health API subscriber (webhook push)
+    # registration. Omitted from the task definition if the secret is absent.
+    GOOGLE_PROJECT_ID_SECRET: ren-gcp-project-number
+
+phases:
+  pre_build:
+    on-failure: ABORT
+    commands:
+      - |
+        set -euo pipefail
+        for command in aws docker jq; do
+          command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
+        done
+        for variable in \
+          DEPLOY_REGION \
+          ECS_PRIVATE_SUBNETS \
+          ECS_TASK_EXECUTION_ROLE_ARN \
+          ALB_SECURITY_GROUP_ID \
+          BACKEND_CALLER_SECURITY_GROUP_IDS \
+          ADMIN_SECURITY_GROUP_ID \
+          BACKEND_TASK_ROLE_ARN \
+          BACKEND_SECURITY_GROUP_ID \
+          BACKEND_TARGET_GROUP_ARN \
+          FRONTEND_TASK_ROLE_ARN \
+          FRONTEND_SECURITY_GROUP_ID \
+          DB_HOST \
+          REDIS_HOST \
+          API_BASE_URL \
+          FRONTEND_URL; do
+          [[ -n "${!variable:-}" ]] || { echo "Missing required CodeBuild variable: $variable" >&2; exit 1; }
+        done
+        SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
+        IMAGE_TAG="${SOURCE_REVISION:0:7}"
+        [[ "$IMAGE_TAG" =~ ^[0-9A-Fa-f]{7}$ ]] || { echo "The resolved source version must begin with a Git commit SHA" >&2; exit 1; }
+        AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+        ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
+        for repository in \
+          "$BACKEND_ECR_REPOSITORY" \
+          "$WORKER_ECR_REPOSITORY" \
+          "$BEAT_ECR_REPOSITORY" \
+          "$FRONTEND_ECR_REPOSITORY"; do
+          aws ecr describe-repositories --region "$DEPLOY_REGION" \
+            --repository-names "$repository" >/dev/null
+        done
+        aws ecs describe-clusters --region "$DEPLOY_REGION" --clusters "$ECS_CLUSTER" \
+          --query 'failures' --output json | jq -e 'length == 0' >/dev/null
+        [[ "$(aws elbv2 describe-target-groups --region "$DEPLOY_REGION" \
+          --target-group-arns "$BACKEND_TARGET_GROUP_ARN" --query 'TargetGroups[0].TargetType' --output text)" == "ip" ]] || \
+          { echo "BACKEND_TARGET_GROUP_ARN must use target type ip for Fargate" >&2; exit 1; }
+        aws ecr get-login-password --region "$DEPLOY_REGION" | \
+          docker login --username AWS --password-stdin "$ECR_REGISTRY"
+  build:
+    on-failure: ABORT
+    commands:
+      - |
+        set -euo pipefail
+        SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
+        IMAGE_TAG="${SOURCE_REVISION:0:7}"
+        AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+        ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
+
+        docker build \
+          --build-arg=GIT_SHA="$SOURCE_REVISION" \
+          --tag="$ECR_REGISTRY/$BACKEND_ECR_REPOSITORY:$IMAGE_TAG" \
+          --tag="$ECR_REGISTRY/$BACKEND_ECR_REPOSITORY:latest" \
+          backend
+        docker push "$ECR_REGISTRY/$BACKEND_ECR_REPOSITORY:$IMAGE_TAG"
+        docker push "$ECR_REGISTRY/$BACKEND_ECR_REPOSITORY:latest"
+
+        docker build \
+          --build-arg=GIT_SHA="$SOURCE_REVISION" \
+          --file=backend/Dockerfile.worker \
+          --tag="$ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG" \
+          --tag="$ECR_REGISTRY/$WORKER_ECR_REPOSITORY:latest" \
+          backend
+        docker push "$ECR_REGISTRY/$WORKER_ECR_REPOSITORY:$IMAGE_TAG"
+        docker push "$ECR_REGISTRY/$WORKER_ECR_REPOSITORY:latest"
+
+        docker build \
+          --build-arg=GIT_SHA="$SOURCE_REVISION" \
+          --file=backend/Dockerfile.beat \
+          --tag="$ECR_REGISTRY/$BEAT_ECR_REPOSITORY:$IMAGE_TAG" \
+          --tag="$ECR_REGISTRY/$BEAT_ECR_REPOSITORY:latest" \
+          backend
+        docker push "$ECR_REGISTRY/$BEAT_ECR_REPOSITORY:$IMAGE_TAG"
+        docker push "$ECR_REGISTRY/$BEAT_ECR_REPOSITORY:latest"
+
+        docker build \
+          --tag="$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:$IMAGE_TAG" \
+          --tag="$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:latest" \
+          frontend
+        docker push "$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:$IMAGE_TAG"
+        docker push "$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:latest"
+  post_build:
+    on-failure: ABORT
+    commands:
+      - |
+        set -euo pipefail
+        SOURCE_REVISION="${CODEBUILD_RESOLVED_SOURCE_VERSION:?CODEBUILD_RESOLVED_SOURCE_VERSION is required}"
+        IMAGE_TAG="${SOURCE_REVISION:0:7}"
+        AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+        ECR_REGISTRY="$AWS_ACCOUNT_ID.dkr.ecr.$DEPLOY_REGION.amazonaws.com"
+
+        image_uri() {
+          echo "$ECR_REGISTRY/$1:$IMAGE_TAG"
+        }
+
+        ensure_log_group() {
+          local log_group="$1"
+          local exists
+          exists="$(aws logs describe-log-groups --region "$DEPLOY_REGION" \
+            --log-group-name-prefix "$log_group" --output json | \
+            jq --arg name "$log_group" 'any(.logGroups[]?; .logGroupName == $name)')"
+          if [[ "$exists" != "true" ]]; then
+            aws logs create-log-group --region "$DEPLOY_REGION" --log-group-name "$log_group"
+          fi
+        }
+
+        grant_ingress() {
+          local target_group="$1"
+          local source_group="$2"
+          local port="$3"
+          local exists
+          exists="$(aws ec2 describe-security-groups --region "$DEPLOY_REGION" \
+            --group-ids "$target_group" --output json | jq \
+            --arg source "$source_group" --argjson port "$port" \
+            'any(.SecurityGroups[0].IpPermissions[]?;
+              .IpProtocol == "tcp" and
+              .FromPort <= $port and
+              .ToPort >= $port and
+              any(.UserIdGroupPairs[]?; .GroupId == $source))')"
+          if [[ "$exists" != "true" ]]; then
+            aws ec2 authorize-security-group-ingress --region "$DEPLOY_REGION" \
+              --group-id "$target_group" --protocol tcp --port "$port" \
+              --source-group "$source_group" >/dev/null
+          fi
+        }
+
+        secret_arn() {
+          aws secretsmanager describe-secret --region "$DEPLOY_REGION" --secret-id "$1" \
+            --query ARN --output text
+        }
+
+        register_task_definition() {
+          local family="$1"
+          local container="$2"
+          local image="$3"
+          local task_role="$4"
+          local log_group="$5"
+          local port="$6"
+          local health_command="$7"
+          local environment="$8"
+          local secrets="$9"
+          # A non-empty command JSON array overrides the image CMD and drops the
+          # service-only port mapping and health check (worker/beat serve no HTTP).
+          local command="${10:-[]}"
+          local current definition_file
+          definition_file="$(mktemp)"
+
+          if current="$(aws ecs describe-task-definition --region "$DEPLOY_REGION" \
+            --task-definition "$family" --query taskDefinition --output json 2>/dev/null)"; then
+            jq -e --arg container "$container" \
+              'any(.containerDefinitions[]; .name == $container)' <<<"$current" >/dev/null || {
+                echo "Existing task family $family has no $container container" >&2
+                return 1
+              }
+            jq \
+              --arg family "$family" \
+              --arg container "$container" \
+              --arg image "$image" \
+              --arg execution_role "$ECS_TASK_EXECUTION_ROLE_ARN" \
+              --arg task_role "$task_role" \
+              --arg cpu "$ECS_TASK_CPU" \
+              --arg memory "$ECS_TASK_MEMORY" \
+              --arg architecture "$ECS_TASK_ARCHITECTURE" \
+              --arg region "$DEPLOY_REGION" \
+              --arg log_group "$log_group" \
+              --arg health_command "$health_command" \
+              --argjson port "$port" \
+              --argjson environment "$environment" \
+              --argjson secrets "$secrets" \
+              --argjson command "$command" \
+              'del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy,
+                .deregisteredAt
+              )
+              | .family = $family
+              | .executionRoleArn = $execution_role
+              | .taskRoleArn = $task_role
+              | .networkMode = "awsvpc"
+              | .requiresCompatibilities = ["FARGATE"]
+              | .cpu = $cpu
+              | .memory = $memory
+              | .runtimePlatform = {
+                  "operatingSystemFamily": "LINUX",
+                  "cpuArchitecture": $architecture
+                }
+              | .containerDefinitions |= map(
+                  if .name == $container then
+                    ($environment | map(.name)) as $environment_names
+                    | ($secrets | map(.name)) as $secret_names
+                    | .image = $image
+                    | .essential = true
+                    | .portMappings = [{
+                        "name": "http",
+                        "containerPort": $port,
+                        "hostPort": $port,
+                        "protocol": "tcp",
+                        "appProtocol": "http"
+                      }]
+                    | .environment = ([
+                        .environment[]?
+                        | select(.name as $name | $environment_names | index($name) | not)
+                      ] + $environment)
+                    | .secrets = ([
+                        .secrets[]?
+                        | select(.name as $name | $secret_names | index($name) | not)
+                      ] + $secrets)
+                    | .healthCheck = {
+                        "command": ["CMD-SHELL", $health_command],
+                        "interval": 30,
+                        "timeout": 10,
+                        "retries": 3,
+                        "startPeriod": 60
+                      }
+                    | .logConfiguration = {
+                        "logDriver": "awslogs",
+                        "options": {
+                          "awslogs-group": $log_group,
+                          "awslogs-region": $region,
+                          "awslogs-stream-prefix": $container
+                        }
+                      }
+                    | if ($command | length) > 0 then
+                        .command = $command
+                        | del(.portMappings, .healthCheck)
+                      else . end
+                  else . end
+                )' <<<"$current" >"$definition_file"
+          else
+            jq -n \
+              --arg family "$family" \
+              --arg container "$container" \
+              --arg image "$image" \
+              --arg execution_role "$ECS_TASK_EXECUTION_ROLE_ARN" \
+              --arg task_role "$task_role" \
+              --arg cpu "$ECS_TASK_CPU" \
+              --arg memory "$ECS_TASK_MEMORY" \
+              --arg architecture "$ECS_TASK_ARCHITECTURE" \
+              --arg region "$DEPLOY_REGION" \
+              --arg log_group "$log_group" \
+              --arg health_command "$health_command" \
+              --argjson port "$port" \
+              --argjson environment "$environment" \
+              --argjson secrets "$secrets" \
+              --argjson command "$command" \
+              '{
+                "family": $family,
+                "executionRoleArn": $execution_role,
+                "taskRoleArn": $task_role,
+                "networkMode": "awsvpc",
+                "requiresCompatibilities": ["FARGATE"],
+                "cpu": $cpu,
+                "memory": $memory,
+                "runtimePlatform": {
+                  "operatingSystemFamily": "LINUX",
+                  "cpuArchitecture": $architecture
+                },
+                "containerDefinitions": [({
+                  "name": $container,
+                  "image": $image,
+                  "essential": true,
+                  "portMappings": [{
+                    "name": "http",
+                    "containerPort": $port,
+                    "hostPort": $port,
+                    "protocol": "tcp",
+                    "appProtocol": "http"
+                  }],
+                  "environment": $environment,
+                  "secrets": $secrets,
+                  "healthCheck": {
+                    "command": ["CMD-SHELL", $health_command],
+                    "interval": 30,
+                    "timeout": 10,
+                    "retries": 3,
+                    "startPeriod": 60
+                  },
+                  "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                      "awslogs-group": $log_group,
+                      "awslogs-region": $region,
+                      "awslogs-stream-prefix": $container
+                    }
+                  }
+                } | if ($command | length) > 0 then
+                    .command = $command
+                    | del(.portMappings, .healthCheck)
+                  else . end)]
+              }' >"$definition_file"
+          fi
+
+          aws ecs register-task-definition --region "$DEPLOY_REGION" \
+            --cli-input-json "file://$definition_file" \
+            --query 'taskDefinition.taskDefinitionArn' --output text
+          rm -f "$definition_file"
+        }
+
+        deploy_service() {
+          local service="$1"
+          local task_definition="$2"
+          local desired_count="$3"
+          local security_group="$4"
+          local service_registry="$5"
+          local deployment_configuration="$6"
+          local target_group="${7:-}"
+          local container_port="${8:-}"
+          local health_grace="${9:-60}"
+          local network_configuration private_subnets status running
+          local -a create_arguments update_arguments
+          private_subnets="${ECS_PRIVATE_SUBNETS//[[:space:]]/}"
+          network_configuration="awsvpcConfiguration={subnets=[$private_subnets],securityGroups=[$security_group],assignPublicIp=DISABLED}"
+          status="$(aws ecs describe-services --region "$DEPLOY_REGION" --cluster "$ECS_CLUSTER" \
+            --services "$service" --query 'services[0].status' --output text)"
+
+          if [[ "$status" == "ACTIVE" ]]; then
+            update_arguments=(
+              --region "$DEPLOY_REGION"
+              --cluster "$ECS_CLUSTER"
+              --service "$service"
+              --task-definition "$task_definition"
+              --network-configuration "$network_configuration"
+              --deployment-configuration "$deployment_configuration"
+              --force-new-deployment
+            )
+            if [[ -n "$service_registry" ]]; then
+              update_arguments+=(--service-registries "registryArn=$service_registry,port=$container_port")
+            fi
+            if [[ -n "$target_group" ]]; then
+              update_arguments+=(--load-balancers "targetGroupArn=$target_group,containerName=$service,containerPort=$container_port")
+            fi
+            aws ecs update-service "${update_arguments[@]}" >/dev/null
+          elif [[ "$status" == "None" ]]; then
+            create_arguments=(
+              --region "$DEPLOY_REGION"
+              --cluster "$ECS_CLUSTER"
+              --service-name "$service"
+              --task-definition "$task_definition"
+              --desired-count "$desired_count"
+              --launch-type FARGATE
+              --platform-version LATEST
+              --network-configuration "$network_configuration"
+              --deployment-configuration "$deployment_configuration"
+              --enable-ecs-managed-tags
+              --propagate-tags SERVICE
+            )
+            if [[ -n "$service_registry" ]]; then
+              create_arguments+=(--service-registries "registryArn=$service_registry,port=$container_port")
+            fi
+            if [[ -n "$target_group" ]]; then
+              create_arguments+=(
+                --load-balancers "targetGroupArn=$target_group,containerName=$service,containerPort=$container_port"
+                --health-check-grace-period-seconds "$health_grace"
+              )
+            fi
+            aws ecs create-service "${create_arguments[@]}" >/dev/null
+          else
+            echo "ECS service $service cannot be deployed while its status is $status" >&2
+            return 1
+          fi
+
+          aws ecs wait services-stable --region "$DEPLOY_REGION" \
+            --cluster "$ECS_CLUSTER" --services "$service"
+          # The circuit breaker rolls a failed deployment back to the previous task
+          # definition, which still satisfies services-stable; fail the build unless
+          # the service is actually running the revision this pipeline registered.
+          running="$(aws ecs describe-services --region "$DEPLOY_REGION" \
+            --cluster "$ECS_CLUSTER" --services "$service" \
+            --query 'services[0].deployments[?status==`PRIMARY`].taskDefinition | [0]' \
+            --output text)"
+          [[ "$running" == "$task_definition" ]] || {
+            echo "ECS service $service stabilized on $running, not $task_definition" >&2
+            return 1
+          }
+        }
+
+        ensure_log_group "$BACKEND_LOG_GROUP"
+        ensure_log_group "$WORKER_LOG_GROUP"
+        ensure_log_group "$BEAT_LOG_GROUP"
+        ensure_log_group "$FRONTEND_LOG_GROUP"
+        # Backend ingress on 8000: ren-backend callers (MAS + DAS resolving the
+        # ren.internal Cloud Map name), the ALB path rules (OAuth callback +
+        # provider webhooks), and the SSM jumphost (admin tunnel).
+        for caller in ${BACKEND_CALLER_SECURITY_GROUP_IDS//,/ }; do
+          grant_ingress "$BACKEND_SECURITY_GROUP_ID" "$caller" "$BACKEND_CONTAINER_PORT"
+        done
+        grant_ingress "$BACKEND_SECURITY_GROUP_ID" "$ALB_SECURITY_GROUP_ID" "$BACKEND_CONTAINER_PORT"
+        grant_ingress "$BACKEND_SECURITY_GROUP_ID" "$ADMIN_SECURITY_GROUP_ID" "$BACKEND_CONTAINER_PORT"
+        # Frontend ingress on 3000: SSM jumphost only (admin tunnel to the
+        # dashboard — nothing else is allowed to reach it).
+        grant_ingress "$FRONTEND_SECURITY_GROUP_ID" "$ADMIN_SECURITY_GROUP_ID" "$FRONTEND_CONTAINER_PORT"
+
+        # ---------------------------------------------------------------------------
+        # RDS connection budget (DB_POOL_SIZE / DB_MAX_OVERFLOW /
+        # DB_ASYNC_POOL_SIZE / DB_ASYNC_MAX_OVERFLOW below)
+        #
+        # max_connections is a property of the *instance*, not the database. The
+        # worker and beat run with desired count 1, so their connections are held
+        # for the life of the task rather than released between tasks. Fargate
+        # has no per-request concurrency cap like Cloud Run's --concurrency: the
+        # pool ceiling itself (DB_POOL_SIZE + DB_MAX_OVERFLOW) is the only bound
+        # on how many concurrent requests one task will actually serve.
+        #   steady state (pool_size, what stays open): api 2x10 + worker 8 + beat 2 = 30
+        #   absolute peak (with max_overflow):        api 2x15 + worker 12 + beat 3 = 45
+        # ...leaving room for co-tenants on the same RDS instance and the rdsadmin
+        # reserved connections. DB_ASYNC_* stay 0: no endpoint takes AsyncDbSession,
+        # so that engine runs as a NullPool and reserves nothing.
+        # ---------------------------------------------------------------------------
+        SHARED_ENVIRONMENT="$(jq -cn \
+          --arg environment "$ENVIRONMENT" \
+          --arg db_host "$DB_HOST" \
+          --arg db_port "$DB_PORT" \
+          --arg db_name "$DB_NAME" \
+          --arg redis_host "$REDIS_HOST" \
+          --arg redis_port "$REDIS_PORT" \
+          --arg redis_ssl "$REDIS_SSL" \
+          --arg api_base_url "$API_BASE_URL" \
+          --arg frontend_url "$FRONTEND_URL" \
+          --arg api_name "$API_NAME" \
+          --arg region "$DEPLOY_REGION" \
+          '[
+            {"name":"ENVIRONMENT","value":$environment},
+            {"name":"DB_HOST","value":$db_host},
+            {"name":"DB_PORT","value":$db_port},
+            {"name":"DB_NAME","value":$db_name},
+            {"name":"REDIS_HOST","value":$redis_host},
+            {"name":"REDIS_PORT","value":$redis_port},
+            {"name":"REDIS_SSL","value":$redis_ssl},
+            {"name":"API_BASE_URL","value":$api_base_url},
+            {"name":"FRONTEND_URL","value":$frontend_url},
+            {"name":"API_NAME","value":$api_name},
+            {"name":"AWS_REGION","value":$region},
+            {"name":"DB_ASYNC_POOL_SIZE","value":"0"},
+            {"name":"DB_ASYNC_MAX_OVERFLOW","value":"0"}
+          ]')"
+        # Combined provider secrets are JSON objects; "<arn>:<key>::" resolves a
+        # single key. DB creds come from the cluster's RDS-managed secret.
+        # GOOGLE_PROJECT_ID is optional — resolve it separately so a missing
+        # secret doesn't fail the build (it is only used for Health API
+        # subscriber/webhook registration).
+        GOOGLE_PROJECT_ID_ARN="$(secret_arn "$GOOGLE_PROJECT_ID_SECRET" 2>/dev/null || true)"
+        BACKEND_SECRETS="$(jq -cn \
+          --arg db_credentials "$DB_CREDENTIALS_SECRET_ARN" \
+          --arg admin_email "$(secret_arn "$ADMIN_EMAIL_SECRET")" \
+          --arg admin_password "$(secret_arn "$ADMIN_PASSWORD_SECRET")" \
+          --arg whoop_credentials "$(secret_arn "$WHOOP_CREDENTIALS_SECRET")" \
+          --arg oura_credentials "$(secret_arn "$OURA_CREDENTIALS_SECRET")" \
+          --arg google_credentials "$(secret_arn "$GOOGLE_CREDENTIALS_SECRET")" \
+          --arg google_project_id "$GOOGLE_PROJECT_ID_ARN" \
+          --arg secret_key "$(secret_arn "$SECRET_KEY_SECRET")" \
+          '[
+            {"name":"DB_USER","valueFrom":($db_credentials + ":username::")},
+            {"name":"DB_PASSWORD","valueFrom":($db_credentials + ":password::")},
+            {"name":"ADMIN_EMAIL","valueFrom":$admin_email},
+            {"name":"ADMIN_PASSWORD","valueFrom":$admin_password},
+            {"name":"WHOOP_CLIENT_ID","valueFrom":($whoop_credentials + ":client_id::")},
+            {"name":"WHOOP_CLIENT_SECRET","valueFrom":($whoop_credentials + ":client_secret::")},
+            {"name":"OURA_CLIENT_ID","valueFrom":($oura_credentials + ":client_id::")},
+            {"name":"OURA_CLIENT_SECRET","valueFrom":($oura_credentials + ":client_secret::")},
+            {"name":"GOOGLE_CLIENT_ID","valueFrom":($google_credentials + ":client_id::")},
+            {"name":"GOOGLE_CLIENT_SECRET","valueFrom":($google_credentials + ":client_secret::")},
+            {"name":"SECRET_KEY","valueFrom":$secret_key}
+          ] + (if $google_project_id != "" then
+            [{"name":"GOOGLE_PROJECT_ID","valueFrom":$google_project_id}]
+          else [] end)')"
+        # Worker/beat don't seed the admin account, so they don't get ADMIN_*.
+        WORKER_BEAT_SECRETS="$(jq -c \
+          '[.[] | select(.name != "ADMIN_EMAIL" and .name != "ADMIN_PASSWORD")]' \
+          <<<"$BACKEND_SECRETS")"
+
+        BACKEND_ENVIRONMENT="$(jq -c \
+          --arg port "$BACKEND_CONTAINER_PORT" \
+          --arg cors "$CORS_ALLOW_ALL" \
+          '. + [
+            {"name":"API_PORT","value":$port},
+            {"name":"CORS_ALLOW_ALL","value":$cors},
+            {"name":"DB_POOL_SIZE","value":"10"},
+            {"name":"DB_MAX_OVERFLOW","value":"5"},
+            {"name":"OUTGOING_WEBHOOKS_ENABLED","value":"false"}
+          ]' <<<"$SHARED_ENVIRONMENT")"
+        # app.sh runs migrations and seed scripts before uvicorn starts, so the
+        # first task on a fresh database can take a while to answer the ALB
+        # health check — hence the 300s grace period. The app has no dedicated
+        # /health route; "/" is the 200-OK endpoint used for health checks.
+        BACKEND_HEALTH_COMMAND="python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:$BACKEND_CONTAINER_PORT/', timeout=5)\""
+        BACKEND_TASK_DEFINITION="$(register_task_definition \
+          "$BACKEND_TASK_FAMILY" "$BACKEND_SERVICE" "$(image_uri "$BACKEND_ECR_REPOSITORY")" \
+          "$BACKEND_TASK_ROLE_ARN" "$BACKEND_LOG_GROUP" "$BACKEND_CONTAINER_PORT" \
+          "$BACKEND_HEALTH_COMMAND" "$BACKEND_ENVIRONMENT" "$BACKEND_SECRETS")"
+        # Cloud Map registration publishes the task IPs as
+        # open-wearables-backend.ren.internal — resolvable by every VPC client,
+        # including the ren-backend measurement-cacher RunTask.
+        deploy_service "$BACKEND_SERVICE" "$BACKEND_TASK_DEFINITION" "$BACKEND_DESIRED_COUNT" \
+          "$BACKEND_SECURITY_GROUP_ID" "$BACKEND_REGISTRY_ARN" \
+          'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100' \
+          "$BACKEND_TARGET_GROUP_ARN" "$BACKEND_CONTAINER_PORT" 300
+
+        # Celery worker: same env/secrets as the backend minus the HTTP-only
+        # config. --concurrency=8 is pinned to stay within DB_POOL_SIZE (8): one
+        # process, one shared pool, more threads than connections would just
+        # queue on checkout. NOTE: like cloudbuild's worker, this consumes only
+        # default,sdk_sync,garmin_sync,webhook_sync — the xml_sync prefork worker
+        # from worker.sh still has no production consumer.
+        WORKER_ENVIRONMENT="$(jq -c \
+          '. + [
+            {"name":"DB_POOL_SIZE","value":"8"},
+            {"name":"DB_MAX_OVERFLOW","value":"4"}
+          ]' <<<"$SHARED_ENVIRONMENT")"
+        WORKER_COMMAND='["celery","-A","app.main:celery_app","worker","--loglevel=info","--pool=threads","--concurrency=8","--prefetch-multiplier=1","-Q","default,sdk_sync,garmin_sync,webhook_sync"]'
+        WORKER_TASK_DEFINITION="$(register_task_definition \
+          "$WORKER_TASK_FAMILY" "$WORKER_SERVICE" "$(image_uri "$WORKER_ECR_REPOSITORY")" \
+          "$BACKEND_TASK_ROLE_ARN" "$WORKER_LOG_GROUP" "$BACKEND_CONTAINER_PORT" \
+          "" "$WORKER_ENVIRONMENT" "$WORKER_BEAT_SECRETS" "$WORKER_COMMAND")"
+        deploy_service "$WORKER_SERVICE" "$WORKER_TASK_DEFINITION" "$WORKER_DESIRED_COUNT" \
+          "$BACKEND_SECURITY_GROUP_ID" "" \
+          'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100'
+
+        # Celery beat: smallest pools (it only reads the schedule). desired=1 and
+        # maximumPercent=100/minimumHealthyPercent=0 keep exactly one beat alive
+        # during deploys — two beats would enqueue every scheduled task twice.
+        BEAT_ENVIRONMENT="$(jq -c \
+          '. + [
+            {"name":"DB_POOL_SIZE","value":"2"},
+            {"name":"DB_MAX_OVERFLOW","value":"1"}
+          ]' <<<"$SHARED_ENVIRONMENT")"
+        BEAT_COMMAND='["bash","-c","rm -f ./celerybeat.pid && exec celery -A app.main:celery_app beat -l info"]'
+        BEAT_TASK_DEFINITION="$(register_task_definition \
+          "$BEAT_TASK_FAMILY" "$BEAT_SERVICE" "$(image_uri "$BEAT_ECR_REPOSITORY")" \
+          "$BACKEND_TASK_ROLE_ARN" "$BEAT_LOG_GROUP" "$BACKEND_CONTAINER_PORT" \
+          "" "$BEAT_ENVIRONMENT" "$WORKER_BEAT_SECRETS" "$BEAT_COMMAND")"
+        deploy_service "$BEAT_SERVICE" "$BEAT_TASK_DEFINITION" "$BEAT_DESIRED_COUNT" \
+          "$BACKEND_SECURITY_GROUP_ID" "" \
+          'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=100,minimumHealthyPercent=0'
+
+        # Frontend: Nitro SSR on port 3000, reachable only through the SSM
+        # jumphost tunnel (see header). VITE_API_URL is resolved at runtime
+        # (window.__APP_CONFIG__ injected into the SSR HTML), so the image needs
+        # no rebuild per environment. It is localhost:8000 on purpose: the
+        # dashboard calls the API from the admin's browser through the tunnel.
+        # node:22-alpine has no python — the health check uses node's global
+        # fetch instead of wget/curl.
+        FRONTEND_ENVIRONMENT="$(jq -cn \
+          --arg environment "$ENVIRONMENT" \
+          '[
+            {"name":"ENVIRONMENT","value":$environment},
+            {"name":"VITE_API_URL","value":"http://localhost:8000"}
+          ]')"
+        FRONTEND_HEALTH_COMMAND="node -e \"fetch('http://127.0.0.1:$FRONTEND_CONTAINER_PORT/').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))\""
+        FRONTEND_TASK_DEFINITION="$(register_task_definition \
+          "$FRONTEND_TASK_FAMILY" "$FRONTEND_SERVICE" "$(image_uri "$FRONTEND_ECR_REPOSITORY")" \
+          "$FRONTEND_TASK_ROLE_ARN" "$FRONTEND_LOG_GROUP" "$FRONTEND_CONTAINER_PORT" \
+          "$FRONTEND_HEALTH_COMMAND" "$FRONTEND_ENVIRONMENT" '[]')"
+        deploy_service "$FRONTEND_SERVICE" "$FRONTEND_TASK_DEFINITION" "$FRONTEND_DESIRED_COUNT" \
+          "$FRONTEND_SECURITY_GROUP_ID" "$FRONTEND_REGISTRY_ARN" \
+          'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100' \
+          "" "$FRONTEND_CONTAINER_PORT"
