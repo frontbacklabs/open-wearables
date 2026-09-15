@@ -1,5 +1,5 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM public.ecr.aws/docker/library/node:22-alpine AS builder
 
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
@@ -24,7 +24,7 @@ ENV NODE_ENV=production
 RUN pnpm run build
 
 # Production stage
-FROM node:22-alpine
+FROM public.ecr.aws/docker/library/node:22-alpine
 
 WORKDIR /app
 # Copy the Nitro build output (server + static public assets) from the builder
