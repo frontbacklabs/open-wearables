@@ -1,5 +1,7 @@
 """Tests for Application service."""
 
+from unittest.mock import patch
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -167,6 +169,16 @@ class TestApplicationServiceRotateSecret:
             application_service.validate_credentials(db, app.app_id, old_secret)
 
         assert exc_info.value.status_code == 401
+
+    def test_rotate_secret_commits_transaction(self, db: Session) -> None:
+        """Rotation must commit, otherwise the new hash is rolled back with the request session."""
+        developer = DeveloperFactory()
+        app, _ = application_service.create_application(db, developer.id, "Test App")
+
+        with patch.object(db, "commit", wraps=db.commit) as mock_commit:
+            application_service.rotate_secret(db, app.app_id, developer.id)
+
+        mock_commit.assert_called_once()
 
     def test_rotate_secret_not_owner_raises_404(self, db: Session) -> None:
         """Should raise 404 when rotating another developer's app secret."""
