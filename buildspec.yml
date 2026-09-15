@@ -522,7 +522,9 @@ phases:
               --force-new-deployment
             )
             if [[ -n "$service_registry" ]]; then
-              update_arguments+=(--service-registries "registryArn=$service_registry,port=$container_port")
+              # A-record registry: the record is the task IP only — 'port' is
+              # rejected (it is only valid for SRV-record services).
+              update_arguments+=(--service-registries "registryArn=$service_registry")
             fi
             if [[ -n "$target_group" ]]; then
               update_arguments+=(--load-balancers "targetGroupArn=$target_group,containerName=$service,containerPort=$container_port")
@@ -543,7 +545,7 @@ phases:
               --propagate-tags SERVICE
             )
             if [[ -n "$service_registry" ]]; then
-              create_arguments+=(--service-registries "registryArn=$service_registry,port=$container_port")
+              create_arguments+=(--service-registries "registryArn=$service_registry")
             fi
             if [[ -n "$target_group" ]]; then
               create_arguments+=(
