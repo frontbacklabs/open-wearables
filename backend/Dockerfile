@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.13-slim AS builder
 
     RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential libpq-dev && \
@@ -22,7 +22,7 @@ FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
     COPY . .
     RUN uv sync --locked --no-dev --no-editable
 
-FROM public.ecr.aws/docker/library/python:3.12-slim
+FROM public.ecr.aws/docker/library/python:3.13-slim
 
     RUN apt-get update && \
     apt-get install -y --no-install-recommends libpq5 && \
