@@ -1,3 +1,8 @@
+# NOTE (fork): the worker and beat images build from backend/Dockerfile.worker
+# and backend/Dockerfile.beat (see the CodeBuild buildspec --file flags), NOT
+# this file. When bumping the Python version here, bump those two files as well:
+# a version mismatch silently drops the celery binary from the worker image
+# (CodeBuild build #19, 2026-09-25).
 FROM public.ecr.aws/docker/library/python:3.14-slim AS builder
 
     RUN apt-get update && \
