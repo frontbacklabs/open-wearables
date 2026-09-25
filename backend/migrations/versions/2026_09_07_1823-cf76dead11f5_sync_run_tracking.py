@@ -24,7 +24,7 @@ def upgrade() -> None:
         "sync_run",
         sa.Column("id", sa.UUID(), nullable=False),
         sa.Column("run_key", sa.String(length=64), nullable=False),
-        sa.Column("user_id", sa.UUID(), nullable=False),
+        sa.Column("user_id", sa.String(length=255), nullable=False),
         sa.Column("provider", sa.String(length=64), nullable=False),
         sa.Column("source", sa.String(length=32), nullable=False),
         sa.Column("scope", sa.String(length=32), nullable=False),
