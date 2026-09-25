@@ -196,6 +196,14 @@ class UserRead(BaseModel):
     )
 
 
+class UserDetailRead(UserRead):
+    """A single user. Carries what the list rows carry, plus the tab-gating flags."""
+
+    has_womens_health_data: bool = Field(
+        False, description="Whether the user has any menstrual cycle events, from any provider"
+    )
+
+
 class UserCreate(BaseModel):
     id: str = Field(
         min_length=1,

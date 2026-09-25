@@ -11,7 +11,7 @@ TIMESERIES: frozenset[SeriesType] = frozenset(
     }
 )
 
-# EventRecordDetail fields populated by workouts.py (workout records)
+# EventRecordDetail fields populated by the shared SDK import service (workout records)
 WORKOUT_FIELDS: frozenset[str] = frozenset(
     {
         "heart_rate_min",
@@ -27,10 +27,11 @@ WORKOUT_FIELDS: frozenset[str] = frozenset(
         "total_elevation_gain",
         "elev_high",
         "elev_low",
+        "entry_source",
     }
 )
 
-# EventRecordDetail fields populated by the shared healthkit sleep service
+# EventRecordDetail fields populated by the shared SDK sleep service
 SLEEP_FIELDS: frozenset[str] = frozenset(
     {
         "sleep_total_duration_minutes",

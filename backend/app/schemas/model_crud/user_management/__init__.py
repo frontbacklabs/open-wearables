@@ -19,6 +19,7 @@ from .user import (
     UserConnectionSummary,
     UserCreate,
     UserCreateInternal,
+    UserDetailRead,
     UserInclude,
     UserQueryParams,
     UserRead,
@@ -50,6 +51,7 @@ __all__ = [
     # User
     "UserQueryParams",
     "UserRead",
+    "UserDetailRead",
     "UserInclude",
     "UserCreate",
     "UserCreateInternal",

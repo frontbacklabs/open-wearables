@@ -8,6 +8,7 @@ Tests cover:
 - PATCH /api/v1/users/{user_id} - update user
 - DELETE /api/v1/users/{user_id} - delete user
 - Connection expansion, connection filters, and sorting on the list endpoint
+- The sync projection and women's health flag on the detail endpoint
 """
 
 from datetime import datetime, timezone
@@ -21,7 +22,15 @@ from sqlalchemy.orm import Session
 from app.models import User
 from app.schemas.auth import ConnectionStatus
 from app.services import create_sdk_user_token, user_service
-from tests.factories import ApiKeyFactory, DeveloperFactory, UserConnectionFactory, UserFactory, fake_firebase_uid
+from tests.factories import (
+    ApiKeyFactory,
+    DataSourceFactory,
+    DeveloperFactory,
+    EventRecordFactory,
+    UserConnectionFactory,
+    UserFactory,
+    fake_firebase_uid,
+)
 from tests.utils import api_key_headers, developer_auth_headers
 
 
@@ -35,7 +44,7 @@ class TestListUsers:
         api_key = ApiKeyFactory(developer=developer)
         user1 = UserFactory(email="user1@example.com", first_name="John", last_name="Doe")
         user2 = UserFactory(email="user2@example.com", first_name="Jane", last_name="Smith")
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.get(f"{api_v1_prefix}/users", headers=headers)
@@ -61,7 +70,7 @@ class TestListUsers:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.get(f"{api_v1_prefix}/users", headers=headers)
@@ -99,7 +108,7 @@ class TestListUsers:
         api_key = ApiKeyFactory(developer=developer)
         UserFactory(email="user1@ci.local", first_name="John", last_name="Doe")
         user2 = UserFactory(email="user2@example.com", first_name="Jane", last_name="Smith")
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.get(f"{api_v1_prefix}/users", headers=headers)
@@ -123,7 +132,7 @@ class TestGetUser:
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         user = UserFactory(email="user@example.com", first_name="John", last_name="Doe")
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
@@ -143,7 +152,7 @@ class TestGetUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         fake_id = "00000000-0000-0000-0000-000000000000"
 
         # Act
@@ -157,7 +166,7 @@ class TestGetUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.get(f"{api_v1_prefix}/users/not-a-uuid", headers=headers)
@@ -185,7 +194,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         user_id = fake_firebase_uid()
         payload = {
             "id": user_id,
@@ -220,7 +229,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         user_id = fake_firebase_uid()
         payload = {"id": user_id}
 
@@ -238,7 +247,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
 
         # Act
         response = client.post(f"{api_v1_prefix}/users", json={"email": "noid@example.com"}, headers=headers)
@@ -251,7 +260,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         existing = UserFactory(email="existing@example.com")
 
         # Act
@@ -266,7 +275,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         payload = {"id": fake_firebase_uid(), "email": "onlyemail@example.com"}
 
         # Act
@@ -284,7 +293,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         payload = {"email": "not-an-email"}
 
         # Act
@@ -298,7 +307,7 @@ class TestCreateUser:
         # Arrange
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         payload = {
             "first_name": "a" * 101,  # Max is 100
             "last_name": "Smith",
@@ -452,7 +461,7 @@ class TestUpdateUser:
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         user = UserFactory(email="user@example.com")
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
         payload = {"email": "new@example.com"}
 
         # Act
@@ -567,14 +576,16 @@ class TestDeleteUser:
         developer = DeveloperFactory(email="test@example.com", password="test123")
         api_key = ApiKeyFactory(developer=developer)
         user = UserFactory(email="user@example.com")
-        headers = api_key_headers(api_key.id)
+        headers = api_key_headers(api_key.plain_key)
+        user_id = user.id
 
         # Act
-        response = client.delete(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+        response = client.delete(f"{api_v1_prefix}/users/{user_id}", headers=headers)
 
         # Assert
         assert response.status_code == 200
-        assert user_service.get(db, user.id, raise_404=False) is None
+        assert response.json()["id"] == str(user_id)
+        assert user_service.get(db, user_id, raise_404=False) is None
 
     def test_delete_user_still_accepts_developer_token(
         self, client: TestClient, db: Session, api_v1_prefix: str
@@ -615,7 +626,7 @@ class TestListUsersConnections:
     @pytest.fixture
     def headers(self) -> dict[str, str]:
         developer = DeveloperFactory(email="connections@example.com", password="test123")
-        return api_key_headers(ApiKeyFactory(developer=developer).id)
+        return api_key_headers(ApiKeyFactory(developer=developer).plain_key)
 
     def test_connections_absent_by_default(self, client: TestClient, api_v1_prefix: str, headers: dict) -> None:
         """Test that connections are omitted unless the expansion is requested."""
@@ -686,7 +697,7 @@ class TestListUsersFilters:
     @pytest.fixture
     def headers(self) -> dict[str, str]:
         developer = DeveloperFactory(email="filters@example.com", password="test123")
-        return api_key_headers(ApiKeyFactory(developer=developer).id)
+        return api_key_headers(ApiKeyFactory(developer=developer).plain_key)
 
     @pytest.fixture
     def users(self) -> dict[str, User]:
@@ -828,3 +839,96 @@ class TestListUsersFilters:
         ordered = [item["id"] for item in response.json()["items"]]
         assert ordered.index(str(users["garmin"].id)) < ordered.index(str(users["whoop"].id))
         assert ordered[-1] == str(users["lonely"].id)
+
+
+class TestGetUserDetailProjection:
+    """Tests for the sync projection and expansions on GET /api/v1/users/{user_id}."""
+
+    @pytest.fixture
+    def headers(self) -> dict[str, str]:
+        developer = DeveloperFactory(email="detail@example.com", password="test123")
+        return api_key_headers(ApiKeyFactory(developer=developer).plain_key)
+
+    def test_reports_last_sync_and_active_connection(
+        self, client: TestClient, api_v1_prefix: str, headers: dict
+    ) -> None:
+        """The detail endpoint must not know less about a user than the list does."""
+        user = UserFactory(email="synced@example.com")
+        UserConnectionFactory(
+            user=user, provider="whoop", last_synced_at=datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+        )
+        UserConnectionFactory(
+            user=user,
+            provider="garmin",
+            status=ConnectionStatus.REVOKED,
+            last_synced_at=datetime(2026, 4, 1, 12, 0, tzinfo=timezone.utc),
+        )
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["last_synced_at"] == "2026-04-01T12:00:00Z"
+        assert data["last_synced_provider"] == "garmin"
+        assert data["has_active_connection"] is True
+
+    def test_unconnected_user_reports_no_sync(self, client: TestClient, api_v1_prefix: str, headers: dict) -> None:
+        user = UserFactory(email="fresh@example.com")
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        data = response.json()
+        assert data["last_synced_at"] is None
+        assert data["last_synced_provider"] is None
+        assert data["has_active_connection"] is False
+
+    def test_connections_absent_by_default(self, client: TestClient, api_v1_prefix: str, headers: dict) -> None:
+        user = UserFactory(email="nodetailconn@example.com")
+        UserConnectionFactory(user=user, provider="garmin")
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        assert "connections" not in response.json()
+
+    def test_include_connections_returns_every_status(
+        self, client: TestClient, api_v1_prefix: str, headers: dict
+    ) -> None:
+        user = UserFactory(email="detailconn@example.com")
+        UserConnectionFactory(user=user, provider="whoop", status=ConnectionStatus.REVOKED)
+        UserConnectionFactory(
+            user=user, provider="garmin", last_synced_at=datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+        )
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}?include=connections", headers=headers)
+
+        assert response.status_code == 200
+        assert response.json()["connections"] == [
+            {"provider": "garmin", "status": "active", "last_synced_at": "2026-03-01T12:00:00Z"},
+            {"provider": "whoop", "status": "revoked", "last_synced_at": None},
+        ]
+
+    def test_womens_health_flag_set_by_menstrual_cycle_events(
+        self, client: TestClient, api_v1_prefix: str, headers: dict
+    ) -> None:
+        user = UserFactory(email="cycle@example.com")
+        EventRecordFactory(
+            data_source=DataSourceFactory(user=user),
+            category="menstrual_cycle",
+            type="period",
+        )
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        assert response.json()["has_womens_health_data"] is True
+
+    def test_womens_health_flag_ignores_other_categories_and_users(
+        self, client: TestClient, api_v1_prefix: str, headers: dict
+    ) -> None:
+        user = UserFactory(email="nocycle@example.com")
+        other = UserFactory(email="othercycle@example.com")
+        EventRecordFactory(data_source=DataSourceFactory(user=user), category="workout", type="running")
+        EventRecordFactory(data_source=DataSourceFactory(user=other), category="menstrual_cycle", type="period")
+
+        response = client.get(f"{api_v1_prefix}/users/{user.id}", headers=headers)
+
+        assert response.json()["has_womens_health_data"] is False

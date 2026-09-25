@@ -9,7 +9,6 @@ Queue and retry policy are configured per-provider at the call site (send_task w
 
 from logging import getLogger
 from typing import Any
-from uuid import UUID
 
 from celery import Task, shared_task
 from fastapi import HTTPException
@@ -83,10 +82,7 @@ def _emit_webhook_sync_status(provider_name: str, result: Any) -> None:
         raw_user_id = result.get("user_id")
         if not raw_user_id:
             return
-        try:
-            user_id = UUID(str(raw_user_id))
-        except (ValueError, TypeError):
-            return
+        user_id = str(raw_user_id)
 
         status_str = str(result.get("status") or "").lower()
         count = _extract_item_count(result)
@@ -95,7 +91,7 @@ def _emit_webhook_sync_status(provider_name: str, result: Any) -> None:
         breakdown = _extract_breakdown(result, count)
 
         if status_str == "error":
-            sync_status_service.webhook_delivered(
+            sync_status_service.emit_webhook_delivered(
                 user_id,
                 provider_name,
                 status=SyncStatus.FAILED,
@@ -106,7 +102,7 @@ def _emit_webhook_sync_status(provider_name: str, result: Any) -> None:
             # Prefer the new/updated split so an upsert-in-place reads as
             # "0 new, 3 updated" rather than looking like freshly arrived data.
             detail = f"{breakdown['inserted']} new, {breakdown['updated']} updated" if breakdown else descriptor
-            sync_status_service.webhook_delivered(
+            sync_status_service.emit_webhook_delivered(
                 user_id,
                 provider_name,
                 status=SyncStatus.SUCCESS,
@@ -117,7 +113,7 @@ def _emit_webhook_sync_status(provider_name: str, result: Any) -> None:
         else:
             # processed-but-no-data, ignored, duplicate, unknown_event_type, …
             reason = result.get("reason") or (descriptor if status_str in _SAVED_STATUSES else status_str)
-            sync_status_service.webhook_delivered(
+            sync_status_service.emit_webhook_delivered(
                 user_id,
                 provider_name,
                 status=SyncStatus.SKIPPED,

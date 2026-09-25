@@ -12,22 +12,23 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import UUID
 
 import httpx
 from jose import jwt
 from svix.api import (
     ApplicationIn,
     EndpointIn,
+    EndpointListOptions,
     EndpointOut,
     EndpointPatch,
     EventTypeIn,
     EventTypeListOptions,
-    EventTypeUpdate,
+    EventTypePatch,
     ListResponseEndpointOut,
     ListResponseMessageAttemptOut,
     ListResponseMessageOut,
     MessageAttemptListByEndpointOptions,
+    MessageGetOptions,
     MessageIn,
     MessageListOptions,
     MessageOut,
@@ -59,16 +60,13 @@ def _user_channels(user_id: str | None) -> list[str] | None:
     return [f"{_USER_CHANNEL_PREFIX}{user_id}"]
 
 
-def user_id_from_endpoint(ep: EndpointOut) -> UUID | None:
+def user_id_from_endpoint(ep: EndpointOut) -> str | None:
     """Extract the user_id filter from an endpoint's Svix channels, if any."""
     if not ep.channels:
         return None
     for ch in ep.channels:
         if ch.startswith(_USER_CHANNEL_PREFIX):
-            try:
-                return UUID(ch[len(_USER_CHANNEL_PREFIX) :])
-            except ValueError:
-                pass
+            return ch[len(_USER_CHANNEL_PREFIX) :]
     return None
 
 
@@ -150,13 +148,13 @@ def register_event_types() -> bool:
             except Exception:
                 # Deemed missing but create failed (archived/race) — update so it is never left unregistered.
                 try:
-                    _client.event_type.update(evt.value, EventTypeUpdate(description=description))
+                    _client.event_type.patch(evt.value, EventTypePatch(description=description))
                 except Exception:
                     logger.exception("Failed to register/update event type %s", evt.value)
                     all_ok = False
         elif current != description:
             try:
-                _client.event_type.update(evt.value, EventTypeUpdate(description=description))
+                _client.event_type.patch(evt.value, EventTypePatch(description=description))
                 logger.info("Updated event type description: %s", evt.value)
             except Exception:
                 logger.exception("Failed to update event type %s", evt.value)
@@ -249,8 +247,8 @@ def create_endpoint(
         "url": url,
         "description": description or "",
     }
-    if filter_types is not None:
-        endpoint_data["filter_types"] = filter_types
+    if filter_types:
+        endpoint_data["event_types"] = filter_types
     channels = _user_channels(user_id)
     if channels is not None:
         endpoint_data["channels"] = channels
@@ -260,9 +258,10 @@ def create_endpoint(
     )
 
 
-def list_endpoints(app_id: str) -> ListResponseEndpointOut:
+def list_endpoints(app_id: str, *, iterator: str | None = None) -> ListResponseEndpointOut:
+    """One page of endpoints. Pass the previous response's `iterator` to walk the rest."""
     assert _client is not None
-    return _client.endpoint.list(app_id)
+    return _client.endpoint.list(app_id, EndpointListOptions(iterator=iterator))
 
 
 def get_endpoint(app_id: str, endpoint_id: str) -> EndpointOut:
@@ -297,7 +296,11 @@ def patch_endpoint(
     if description is not None:
         patch_data["description"] = description
     if filter_types is not None:
-        patch_data["filter_types"] = filter_types
+        # [] is the public "remove the filter" signal (Svix rejects an empty list,
+        # so it goes out as an explicit null).  None stays a no-op: it is what an
+        # omitted field deserialises to and external clients already rely on that,
+        # so it must not be repurposed into a second clearing signal.
+        patch_data["event_types"] = filter_types or None
     if user_id is not None:
         patch_data["channels"] = _user_channels(user_id)
     elif clear_user_id:
@@ -325,7 +328,7 @@ def get_endpoint_secret(app_id: str, endpoint_id: str) -> str:
 def get_message(app_id: str, msg_id: str) -> MessageOut | None:
     assert _client is not None
     try:
-        return _client.message.get(app_id, msg_id)
+        return _client.message.get(app_id, msg_id, MessageGetOptions(with_content=True))
     except Exception:
         logger.debug("Could not fetch message %s for app %s", msg_id, app_id)
         return None
@@ -355,15 +358,15 @@ def send_test_message(app_id: str, endpoint_id: str, event_type: str) -> Message
 
     Uses ``message.create`` with an example payload instead of
     ``endpoint.send_example`` which requires Svix event-type schemas to be defined.
-    The event_type is adjusted to match the endpoint's filter_types if set.
+    The event_type is adjusted to match the endpoint's filters if set.
     """
     if not is_enabled():
         return None
     assert _client is not None
     try:
         ep = _client.endpoint.get(app_id, endpoint_id)
-        if ep.filter_types and event_type not in ep.filter_types:
-            event_type = ep.filter_types[0]
+        if ep.event_types and event_type not in ep.event_types:
+            event_type = ep.event_types[0]
         return _client.message.create(
             app_id,
             MessageIn(
