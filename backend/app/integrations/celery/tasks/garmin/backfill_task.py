@@ -10,7 +10,6 @@ Redis state management lives in ``app.services.providers.garmin.backfill_state``
 
 from logging import getLogger
 from typing import Any
-from uuid import UUID
 
 from celery import shared_task
 
@@ -92,7 +91,7 @@ def _release_shared_backfill_primary(user_id: str, *, overall_status: SyncStatus
                 scope=SyncScope.HISTORICAL,
                 status=overall_status,
                 message="Garmin backfill complete (data synced via linked profile)",
-                primary_user_id=UUID(user_id),
+                primary_user_id=user_id,
             )
     except Exception as exc:
         log_structured(
@@ -103,7 +102,7 @@ def _release_shared_backfill_primary(user_id: str, *, overall_status: SyncStatus
             user_id=user_id,
         )
 
-    release_primary_for_user("garmin", provider_user_id, UUID(user_id), scope="backfill")
+    release_primary_for_user("garmin", provider_user_id, user_id, scope="backfill")
     clear_secondaries("garmin", provider_user_id, scope="backfill")
     get_redis_client().delete(_get_key(user_id, "shared_provider_user_id"))
 
@@ -118,7 +117,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
     """
 
     try:
-        UUID(user_id)
+        user_id
     except ValueError as e:
         log_structured(
             logger,
@@ -135,7 +134,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
     # proceed so the user doesn't get silently blocked.
     with SessionLocal() as db:
         connection_repo = UserConnectionRepository()
-        connection = connection_repo.get_by_user_and_provider(db, UUID(user_id), "garmin")
+        connection = connection_repo.get_by_user_and_provider(db, user_id, "garmin")
         if not connection:
             log_structured(
                 logger,
@@ -174,11 +173,11 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
     # receive data via webhook fan-out (activities.py / wellness.py).
     if connection.provider_user_id:
         is_backfill_primary, shared_token, existing_primary = try_become_primary(
-            "garmin", connection.provider_user_id, UUID(user_id), scope="backfill"
+            "garmin", connection.provider_user_id, user_id, scope="backfill"
         )
         if not is_backfill_primary:
             release_backfill_lock(user_id)
-            register_secondary("garmin", connection.provider_user_id, UUID(user_id), scope="backfill")
+            register_secondary("garmin", connection.provider_user_id, user_id, scope="backfill")
             log_structured(
                 logger,
                 "info",
@@ -189,7 +188,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
                 primary_user_id=str(existing_primary) if existing_primary else None,
             )
             emit_sync_started(
-                UUID(user_id),
+                user_id,
                 "garmin",
                 SyncSource.LINKED_ACCOUNT,
                 run_id=f"garmin_backfill_{user_id}_{trace_id}",
@@ -204,7 +203,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
             return {"status": "secondary", "primary_user_id": str(existing_primary) if existing_primary else None}
 
         # Won the shared lock — store token and provider_user_id for cross-task release
-        store_primary_token("garmin", connection.provider_user_id, UUID(user_id), shared_token, scope="backfill")
+        store_primary_token("garmin", connection.provider_user_id, user_id, shared_token, scope="backfill")
         get_redis_client().setex(_get_key(user_id, "shared_provider_user_id"), REDIS_TTL, connection.provider_user_id)
 
         # Proactively emit emit_sync_started(LINKED_ACCOUNT) for every other OW profile sharing this
@@ -218,7 +217,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
                     db, "garmin", connection.provider_user_id
                 )
             for conn in other_connections:
-                if conn.user_id == UUID(user_id):
+                if conn.user_id == user_id:
                     continue
                 existing_trace = get_trace_id(str(conn.user_id))
                 if existing_trace:
@@ -233,7 +232,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
                     run_id=f"garmin_backfill_{conn.user_id}_{sec_trace_id}",
                     scope=SyncScope.HISTORICAL,
                     message="Garmin backfill in progress via linked OW profile",
-                    primary_user_id=UUID(user_id),
+                    primary_user_id=user_id,
                     metadata={
                         "trace_id": sec_trace_id,
                         "primary_user_id": user_id,
@@ -275,7 +274,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
         )
 
         emit_sync_started(
-            UUID(user_id),
+            user_id,
             "garmin",
             SyncSource.BACKFILL,
             run_id=f"garmin_backfill_{user_id}_{trace_id}",
@@ -317,7 +316,7 @@ def start_full_backfill(user_id: str) -> dict[str, Any]:
     )
 
     emit_sync_started(
-        UUID(user_id),
+        user_id,
         "garmin",
         SyncSource.BACKFILL,
         run_id=f"garmin_backfill_{user_id}_{trace_id}",
@@ -407,7 +406,7 @@ def trigger_next_pending_type(user_id: str) -> dict[str, Any]:
                 user_id=user_id,
             )
             emit_sync_completed(
-                UUID(user_id),
+                user_id,
                 "garmin",
                 SyncSource.BACKFILL,
                 run_id=_run_id,
@@ -434,7 +433,7 @@ def trigger_next_pending_type(user_id: str) -> dict[str, Any]:
             total_windows = get_total_windows(user_id)
             _run_id = f"garmin_backfill_{user_id}_{trace_id}" if trace_id else f"garmin_backfill_{user_id}"
             emit_sync_progress(
-                UUID(user_id),
+                user_id,
                 "garmin",
                 SyncSource.BACKFILL,
                 run_id=_run_id,
@@ -491,7 +490,7 @@ def trigger_next_pending_type(user_id: str) -> dict[str, Any]:
             completed_windows=completed_windows,
         )
         emit_sync_completed(
-            UUID(user_id),
+            user_id,
             "garmin",
             SyncSource.BACKFILL,
             run_id=_run_id,
