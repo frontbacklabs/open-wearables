@@ -11,7 +11,7 @@ sanctioned wipe of user data — it is NOT reversible, and the downgrade restore
 column types only, not the rows.
 
 Revision ID: ca47df2312b7
-Revises: a7c3e9f1b2d4
+Revises: dc5ac28c4b94
 
 """
 
@@ -22,7 +22,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "ca47df2312b7"
-down_revision: Union[str, None] = "a7c3e9f1b2d4"
+down_revision: Union[str, None] = "dc5ac28c4b94"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -35,7 +35,6 @@ _USER_FKS: tuple[tuple[str, str, str, bool], ...] = (
     ("refresh_token", "user_id", "refresh_token_user_id_fkey", True),
     ("user_connection", "user_id", "user_connection_user_id_fkey", False),
     ("user_invitation_code", "user_id", "user_invitation_code_user_id_fkey", False),
-    ("sync_run", "user_id", "sync_run_user_id_fkey", False),
 )
 
 
