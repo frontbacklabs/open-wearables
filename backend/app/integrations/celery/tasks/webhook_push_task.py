@@ -9,7 +9,6 @@ Queue and retry policy are configured per-provider at the call site (send_task w
 
 from logging import getLogger
 from typing import Any
-from uuid import UUID
 
 from celery import Task, shared_task
 from fastapi import HTTPException
@@ -83,10 +82,7 @@ def _emit_webhook_sync_status(provider_name: str, result: Any) -> None:
         raw_user_id = result.get("user_id")
         if not raw_user_id:
             return
-        try:
-            user_id = UUID(str(raw_user_id))
-        except (ValueError, TypeError):
-            return
+        user_id = str(raw_user_id)
 
         status_str = str(result.get("status") or "").lower()
         count = _extract_item_count(result)

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import Any
 from unittest.mock import patch
-from uuid import uuid4
 
 import pytest
 
@@ -21,7 +20,8 @@ from app.schemas.sync_status import SyncStatus
 
 @pytest.fixture
 def user_id() -> str:
-    return str(uuid4())
+    # User IDs are Firebase UID strings, not UUIDs.
+    return "xY2kLm9PvQrStUvWzAbC3dEf4gH5"
 
 
 def _capture() -> tuple[list[dict], Any]:
@@ -96,9 +96,14 @@ def test_self_reporting_provider_excluded(user_id: str) -> None:
 
 
 def test_emission_never_raises() -> None:
-    """Sync-log emission must never break webhook processing."""
+    """Sync-log emission must never break webhook processing.
+
+    A malformed (non-dict) result is dropped, but a non-UUID user_id string —
+    Firebase UIDs are not UUIDs — is still attributed and emitted.
+    """
     calls, fake = _capture()
     with patch.object(task.sync_status_service, "emit_webhook_delivered", side_effect=fake):
         task._emit_webhook_sync_status("oura", None)
         task._emit_webhook_sync_status("oura", {"status": "processed", "records_saved": 1, "user_id": "not-a-uuid"})
-    assert calls == []
+    assert len(calls) == 1
+    assert calls[0]["user_id"] == "not-a-uuid"

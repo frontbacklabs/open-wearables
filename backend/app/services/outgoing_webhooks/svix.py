@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from uuid import UUID
 
 import httpx
 from jose import jwt
@@ -61,16 +60,13 @@ def _user_channels(user_id: str | None) -> list[str] | None:
     return [f"{_USER_CHANNEL_PREFIX}{user_id}"]
 
 
-def user_id_from_endpoint(ep: EndpointOut) -> UUID | None:
+def user_id_from_endpoint(ep: EndpointOut) -> str | None:
     """Extract the user_id filter from an endpoint's Svix channels, if any."""
     if not ep.channels:
         return None
     for ch in ep.channels:
         if ch.startswith(_USER_CHANNEL_PREFIX):
-            try:
-                return UUID(ch[len(_USER_CHANNEL_PREFIX) :])
-            except ValueError:
-                pass
+            return ch[len(_USER_CHANNEL_PREFIX) :]
     return None
 
 

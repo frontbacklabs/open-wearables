@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Generator
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
@@ -18,6 +19,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from svix.api import EndpointOut
 
 from app.integrations.celery.tasks.emit_webhook_event_task import emit_webhook_event
 from app.schemas.webhooks.event_types import EVENT_TYPE_DESCRIPTIONS, WebhookEventType
@@ -544,6 +546,43 @@ class TestSvixFilterTypesHandling:
 
         sent = mock_client.endpoint.patch.call_args.args[2]
         assert sent.event_types == ["sleep.created"]
+
+
+class TestUserIdFromEndpoint:
+    """`user_id_from_endpoint` returns the raw `user.<id>` channel suffix.
+
+    User IDs are Firebase UIDs — opaque strings, not UUIDs — so the suffix
+    must come back verbatim rather than being parsed (and dropped on failure).
+    """
+
+    def _ep(self, channels: list[str] | None) -> EndpointOut:
+        return EndpointOut(
+            id="ep_1",
+            url="https://example.com/wh",
+            description="",
+            metadata={},
+            channels=channels,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
+        )
+
+    def test_returns_firebase_uid_verbatim(self) -> None:
+        uid = fake_firebase_uid()
+        result = svix_service.user_id_from_endpoint(self._ep([f"user.{uid}"]))
+        assert result == uid
+        assert isinstance(result, str)
+
+    def test_returns_none_without_channels(self) -> None:
+        assert svix_service.user_id_from_endpoint(self._ep(None)) is None
+        assert svix_service.user_id_from_endpoint(self._ep([])) is None
+
+    def test_returns_none_when_no_user_channel(self) -> None:
+        assert svix_service.user_id_from_endpoint(self._ep(["broadcast", "team.alpha"])) is None
+
+    def test_skips_non_user_channels(self) -> None:
+        uid = fake_firebase_uid()
+        ep = self._ep(["broadcast", f"user.{uid}"])
+        assert svix_service.user_id_from_endpoint(ep) == uid
 
 
 class TestSvixDeliveryContent:
