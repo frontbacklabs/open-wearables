@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
@@ -88,8 +89,9 @@ def oauth_callback(
     Provider redirects here after user authorizes. Exchanges code for tokens.
     """
     if error:
+        err_msg = f"{error}: {error_description or 'Unknown error'}"
         return RedirectResponse(
-            url=f"/api/v1/oauth/error?message={error}:+{error_description or 'Unknown+error'}",
+            url=f"/api/v1/oauth/error?{urlencode({'message': err_msg})}",
             status_code=303,
         )
 
