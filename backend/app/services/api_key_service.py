@@ -90,7 +90,8 @@ class ApiKeyService(AppService[ApiKeyRepository, ApiKey, ApiKeyCreate, ApiKeyUpd
 api_key_service = ApiKeyService(log=getLogger(__name__))
 
 
-async def _authenticate(db: Session, developer: Developer | None, api_key: str | None) -> str:
+def _authenticate(db: Session, developer: Developer | None, api_key: str | None) -> str:
+    """Sync on purpose — blocking DB work, see :func:`app.utils.auth.get_current_developer`."""
     if developer:
         return str(developer.id)
     if api_key:
@@ -98,15 +99,15 @@ async def _authenticate(db: Session, developer: Developer | None, api_key: str |
     raise HTTPException(status_code=401, detail="Authentication required: provide JWT token or API key")
 
 
-async def _require_api_key(
+def _require_api_key(
     db: DbSession,
     developer: Developer | None = Depends(get_current_developer_optional),
     x_open_wearables_api_key: str | None = Header(None, alias="X-Open-Wearables-API-Key"),
 ) -> str:
-    return await _authenticate(db, developer, x_open_wearables_api_key)
+    return _authenticate(db, developer, x_open_wearables_api_key)
 
 
-async def _require_api_key_detached(
+def _require_api_key_detached(
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
     x_open_wearables_api_key: str | None = Header(None, alias="X-Open-Wearables-API-Key"),
 ) -> str:
@@ -117,7 +118,7 @@ async def _require_api_key_detached(
     until the client disconnects, so a streaming endpoint has to authenticate detached.
     """
     with SessionLocal() as db:
-        return await _authenticate(db, await get_current_developer_optional(db, token), x_open_wearables_api_key)
+        return _authenticate(db, get_current_developer_optional(db, token), x_open_wearables_api_key)
 
 
 ApiKeyDep = Annotated[str, Depends(_require_api_key)]
