@@ -47,7 +47,7 @@ class TestTimeSeriesEndpoint:
 
         response = client.get(
             self._url(user.id),
-            headers=api_key_headers(api_key.id),
+            headers=api_key_headers(api_key.plain_key),
             params={**self.BASE_PARAMS, "sort_order": "desc"},
         )
 
@@ -63,7 +63,7 @@ class TestTimeSeriesEndpoint:
 
         response = client.get(
             self._url(user.id),
-            headers=api_key_headers(api_key.id),
+            headers=api_key_headers(api_key.plain_key),
             params=self.BASE_PARAMS,
         )
 
@@ -79,7 +79,7 @@ class TestTimeSeriesEndpoint:
 
         response = client.get(
             self._url(user.id),
-            headers=api_key_headers(api_key.id),
+            headers=api_key_headers(api_key.plain_key),
             params={**self.BASE_PARAMS, "sort_order": "desc", "limit": 2},
         )
 
@@ -90,7 +90,7 @@ class TestTimeSeriesEndpoint:
 
         next_page = client.get(
             self._url(user.id),
-            headers=api_key_headers(api_key.id),
+            headers=api_key_headers(api_key.plain_key),
             params={
                 **self.BASE_PARAMS,
                 "sort_order": "desc",
@@ -109,7 +109,7 @@ class TestTimeSeriesEndpoint:
 
         response = client.get(
             self._url(user.id),
-            headers=api_key_headers(api_key.id),
+            headers=api_key_headers(api_key.plain_key),
             params={**self.BASE_PARAMS, "sort_order": "newest"},
         )
 

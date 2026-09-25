@@ -8,7 +8,7 @@ Tests cover:
 - create_or_merge_sleep: adjacent session merging
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -17,7 +17,12 @@ from sqlalchemy.orm import Session
 
 from app.models import DataSource, EventRecord, HealthScore
 from app.schemas.enums import HealthScoreCategory, ProviderName
-from app.schemas.model_crud.activities import EventRecordCreate, EventRecordDetailCreate, EventRecordQueryParams
+from app.schemas.model_crud.activities import (
+    EventRecordCreate,
+    EventRecordDetailCreate,
+    EventRecordQueryParams,
+    SleepInclude,
+)
 from app.schemas.model_crud.activities.sleep import SleepStage
 from app.services.event_record_service import event_record_service
 from tests.factories import DataSourceFactory, EventRecordFactory, SleepDetailsFactory, UserFactory
@@ -170,6 +175,29 @@ class TestEventRecordServiceBulkCreateDetails:
         assert mock_workout.call_count == 2
         dispatched_ids = {c.kwargs["record_id"] for c in mock_workout.call_args_list}
         assert dispatched_ids == {rec1.id, rec2.id}
+
+    def test_workout_webhook_pace_comes_from_distance_not_average_speed(self, db: Session) -> None:
+        """average_speed is km/h for Suunto and m/s elsewhere, so pace must not be derived from it."""
+        data_source = DataSourceFactory(source="suunto")
+        record = EventRecordFactory(mapping=data_source, category="workout", type_="running")
+        details = [
+            EventRecordDetailCreate(
+                record_id=record.id,
+                distance=Decimal("10000.0"),
+                moving_time_seconds=3000,
+                average_speed=Decimal("12.00"),
+            )
+        ]
+
+        with (
+            patch("app.services.event_record_service.svix_service.is_enabled", return_value=True),
+            patch("app.services.event_record_service.on_workout_created") as mock_workout,
+        ):
+            event_record_service.bulk_create_details(db, details, detail_type="workout")
+            db.commit()
+
+        # 10 km in 3000 s is 300 s/km; the old 1000/average_speed formula would have said 83.
+        assert mock_workout.call_args.kwargs["avg_pace_sec_per_km"] == 300
 
     def test_bulk_create_details_silent_when_svix_disabled(self, db: Session) -> None:
         data_source = DataSourceFactory(source="apple")
@@ -877,7 +905,7 @@ class TestRecomputeSleepScores:
         SleepDetailsFactory(event_record=record, sleep_total_duration_minutes=420, is_nap=False)
         return record
 
-    def _internal_sleep_scores(self, db: Session, user_id: UUID) -> list[HealthScore]:
+    def _internal_sleep_scores(self, db: Session, user_id: str) -> list[HealthScore]:
         return (
             db.query(HealthScore)
             .filter(
@@ -969,6 +997,114 @@ class TestGetSleepSessions:
         assert session.duration_seconds == 28800  # time in bed (unchanged)
         assert session.sleep_duration_seconds == 450 * 60  # actual sleep
 
+    def test_unreported_stages_stay_null_instead_of_reading_as_zero(self, db: Session) -> None:
+        """A provider that does not measure a stage must not show the user zero minutes of it."""
+        user = UserFactory()
+        record = EventRecordFactory(
+            mapping=DataSourceFactory(user=user, source="oura"), category="sleep", type_="sleep"
+        )
+        SleepDetailsFactory(
+            event_record=record,
+            sleep_deep_minutes=None,
+            sleep_rem_minutes=None,
+            sleep_light_minutes=300,
+            sleep_awake_minutes=0,
+            sleep_efficiency_score=None,
+        )
+
+        params = EventRecordQueryParams(
+            start_datetime=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+        session = next(
+            s for s in event_record_service.get_sleep_sessions(db, user.id, params).data if s.id == record.id
+        )
+
+        assert session.stages is not None
+        assert session.stages.deep_minutes is None
+        assert session.stages.rem_minutes is None
+        assert session.stages.light_minutes == 300
+        assert session.stages.awake_minutes == 0  # measured zero survives
+        assert session.efficiency_percent is None
+
+    def test_stage_intervals_are_opt_in(self, db: Session) -> None:
+        """Intervals are ~89% of a sleep page, so they ship only when asked for."""
+        user = UserFactory()
+        record = EventRecordFactory(
+            mapping=DataSourceFactory(user=user, source="oura"), category="sleep", type_="sleep"
+        )
+        stage = SleepStage(
+            stage="light",
+            start_time=datetime(2026, 4, 10, 23, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 4, 10, 23, 40, tzinfo=timezone.utc),
+        )
+        SleepDetailsFactory(event_record=record, sleep_stages=[stage.model_dump(mode="json")])
+
+        params = EventRecordQueryParams(
+            start_datetime=datetime(2020, 1, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2030, 1, 1, tzinfo=timezone.utc),
+        )
+
+        default = event_record_service.get_sleep_sessions(db, user.id, params)
+        expanded = event_record_service.get_sleep_sessions(db, user.id, params, include=[SleepInclude.STAGES])
+
+        assert next(s for s in default.data if s.id == record.id).sleep_stage_intervals is None
+        intervals = next(s for s in expanded.data if s.id == record.id).sleep_stage_intervals
+        assert intervals is not None
+        assert intervals[0].stage == "light"
+
+    def test_time_in_bed_comes_from_the_provider_not_the_record_span(self, db: Session) -> None:
+        """The reported time in bed differs from end-minus-start often enough to be worth returning."""
+        user = UserFactory()
+        record = EventRecordFactory(
+            mapping=DataSourceFactory(user=user, source="oura"),
+            category="sleep",
+            type_="sleep",
+            start_datetime=datetime(2026, 4, 10, 23, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 11, 7, 0, tzinfo=timezone.utc),
+            duration_seconds=28800,
+        )
+        SleepDetailsFactory(event_record=record, sleep_time_in_bed_minutes=470)
+
+        params = EventRecordQueryParams(
+            start_datetime=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 30, tzinfo=timezone.utc),
+        )
+        session = next(
+            s for s in event_record_service.get_sleep_sessions(db, user.id, params).data if s.id == record.id
+        )
+
+        assert session.duration_seconds == 28800
+        assert session.time_in_bed_seconds == 470 * 60
+
+    def test_source_filters_narrow_the_sleep_list(self, db: Session) -> None:
+        """Sleep accepts the same origin filters as the workout list."""
+        user = UserFactory()
+        oura = DataSourceFactory(user=user, provider=ProviderName.OURA, source="oura_api")
+        whoop = DataSourceFactory(user=user, provider=ProviderName.WHOOP, source="whoop_api")
+        base = datetime(2026, 4, 10, 23, 0, tzinfo=timezone.utc)
+        for mapping, offset in ((oura, 0), (whoop, 24)):
+            EventRecordFactory(
+                mapping=mapping,
+                category="sleep",
+                type_="sleep",
+                start_datetime=base + timedelta(hours=offset),
+                end_datetime=base + timedelta(hours=offset + 8),
+            )
+
+        def fetch(**overrides) -> list:
+            params = EventRecordQueryParams(
+                start_datetime=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 4, 30, tzinfo=timezone.utc),
+                **overrides,
+            )
+            return event_record_service.get_sleep_sessions(db, user.id, params).data
+
+        assert len(fetch()) == 2
+        assert [s.source.provider for s in fetch(provider=ProviderName.OURA)] == ["oura"]
+        assert len(fetch(source="whoop_api")) == 1
+        assert len(fetch(data_source_id=oura.id)) == 1
+
     def test_out_of_range_efficiency_is_not_returned(self, db: Session) -> None:
         user = UserFactory()
         mapping = DataSourceFactory(user=user, source="google")
@@ -1012,6 +1148,78 @@ class TestGetSleepSessions:
         session = next(s for s in response.data if s.id == record.id)
         assert session.duration_seconds == 28800
         assert session.sleep_duration_seconds is None
+
+    def _nap_mix(self, mapping: DataSource) -> dict[str, EventRecord]:
+        """One nap plus main sleeps flagged False, flagged NULL and without a detail row."""
+        base = datetime(2026, 4, 10, 23, 0, tzinfo=timezone.utc)
+        records = {
+            key: EventRecordFactory(
+                mapping=mapping,
+                category="sleep",
+                type_="sleep",
+                start_datetime=base + timedelta(days=day),
+                end_datetime=base + timedelta(days=day, hours=1),
+            )
+            for day, key in enumerate(("nap", "main", "unflagged", "no_details"))
+        }
+        SleepDetailsFactory(event_record=records["nap"], is_nap=True)
+        SleepDetailsFactory(event_record=records["main"], is_nap=False)
+        SleepDetailsFactory(event_record=records["unflagged"], is_nap=None)
+        return records
+
+    def test_is_nap_filter_splits_naps_from_main_sleep(self, db: Session) -> None:
+        """Omitted returns everything; true/false partition it, treating NULL or missing details as main sleep."""
+        user = UserFactory()
+        records = self._nap_mix(DataSourceFactory(user=user, source="oura"))
+
+        def fetch(**overrides) -> set[UUID]:
+            params = EventRecordQueryParams(
+                start_datetime=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 4, 30, tzinfo=timezone.utc),
+                **overrides,
+            )
+            response = event_record_service.get_sleep_sessions(db, user.id, params)
+            assert response.pagination.total_count == len(response.data)
+            return {s.id for s in response.data}
+
+        ids = {key: record.id for key, record in records.items()}
+        assert fetch() == set(ids.values())
+        assert fetch(is_nap=True) == {ids["nap"]}
+        assert fetch(is_nap=False) == {ids["main"], ids["unflagged"], ids["no_details"]}
+
+    def test_is_nap_filter_applies_before_priority(self, db: Session) -> None:
+        """A nap from the top source must not hide another source's main sleep that night, and vice versa."""
+        from app.services.priority_service import priority_service
+
+        user = UserFactory()
+        garmin = DataSourceFactory(user=user, provider="garmin", source="garmin")
+        oura = DataSourceFactory(user=user, provider="oura", source="oura")
+        garmin_nap = EventRecordFactory(
+            mapping=garmin,
+            category="sleep",
+            type_="sleep",
+            start_datetime=datetime(2026, 4, 11, 13, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 4, 11, 14, 0, tzinfo=timezone.utc),
+        )
+        SleepDetailsFactory(event_record=garmin_nap, is_nap=True)
+        oura_night = self._sleep_record(oura)
+        SleepDetailsFactory(event_record=oura_night, is_nap=False)
+
+        priority_service.update_provider_priority(db, ProviderName.GARMIN, 1)
+        priority_service.update_provider_priority(db, ProviderName.OURA, 2)
+
+        def fetch(is_nap: bool) -> set[UUID]:
+            params = EventRecordQueryParams(
+                start_datetime=datetime(2026, 4, 1, tzinfo=timezone.utc),
+                end_datetime=datetime(2026, 4, 30, tzinfo=timezone.utc),
+                is_nap=is_nap,
+            )
+            return {
+                s.id for s in event_record_service.get_sleep_sessions(db, user.id, params, filter_by_priority=True).data
+            }
+
+        assert fetch(is_nap=False) == {oura_night.id}
+        assert fetch(is_nap=True) == {garmin_nap.id}
 
     def _sleep_record(self, mapping: DataSource) -> EventRecord:
         """Create a sleep session ending 2026-04-11 (UTC) for the given source."""

@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
@@ -6,7 +8,7 @@ from sqlalchemy.dialects.postgresql import aggregate_order_by, array_agg
 from sqlalchemy.orm import Query, aliased
 
 from app.database import DbSession
-from app.models import User
+from app.models import DataSource, EventRecord, MenstrualCycleDetails, User
 from app.models.user_connection import UserConnection
 from app.repositories.repositories import CrudRepository
 from app.schemas.auth import ConnectionStatus
@@ -18,10 +20,30 @@ from app.schemas.model_crud.user_management import (
     UserUpdateInternal,
 )
 
+# (User, last_synced_at, last_synced_provider, has_active_connection, connections)
+UserWithConnectionSummary = tuple[User, datetime | None, str | None, bool, list[dict[str, Any]] | None]
+# The same, plus has_womens_health_data
+UserDetailRow = tuple[User, datetime | None, str | None, bool, list[dict[str, Any]] | None, bool]
+
 
 def _connection_exists(*conditions: ColumnElement[bool]) -> Exists:
     """Build a correlated EXISTS over the connections of the outer user row."""
     return select(literal(1)).where(UserConnection.user_id == User.id, *conditions).correlate(User).exists()
+
+
+def _womens_health_exists(user_id: str) -> Exists:
+    """Whether the user has any menstrual cycle event, via ix_event_record_source_category.
+
+    A handful of index seeks, so a UI tab can be gated on it without the per-user summary.
+    """
+    return (
+        select(literal(1))
+        .select_from(EventRecord)
+        .join(DataSource, EventRecord.data_source_id == DataSource.id)
+        # The detail model owns the category value, so it is not spelled out again here.
+        .where(DataSource.user_id == user_id, EventRecord.category == MenstrualCycleDetails.detail_type)
+        .exists()
+    )
 
 
 class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal]):
@@ -50,7 +72,7 @@ class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal
         self,
         db_session: DbSession,
         query_params: UserQueryParams,
-    ) -> tuple[list[tuple[User, datetime | None, str | None, bool, list[dict[str, Any]] | None]], int]:
+    ) -> tuple[list[UserWithConnectionSummary], int]:
         """Get users with filtering, searching, and pagination.
 
         The page is selected before the lateral join, so connections are looked up once per
@@ -75,7 +97,7 @@ class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal
         page = query.offset(offset).limit(query_params.limit).subquery()
         page_user = aliased(self.model, page)
 
-        summary = self._connection_summary(page_user, query_params)
+        summary = self._connection_summary(page_user, query_params.include)
         rows = (
             db_session.query(page_user, *summary.c)
             .outerjoin(summary, true())
@@ -84,6 +106,29 @@ class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal
         )
 
         return rows, total_count
+
+    def get_with_connection_summary(
+        self,
+        db_session: DbSession,
+        user_id: str,
+        include: Sequence[UserInclude] = (),
+    ) -> UserDetailRow | None:
+        """One user with the same projection the list rows get, plus has_womens_health_data.
+
+        Shares ``_connection_summary`` with the list, which is what stops the detail endpoint
+        from knowing less about a user than the list does.
+        """
+        summary = self._connection_summary(self.model, include)
+        return (
+            db_session.query(
+                self.model,
+                *summary.c,
+                _womens_health_exists(user_id).label("has_womens_health_data"),
+            )
+            .outerjoin(summary, true())
+            .filter(self.model.id == user_id)
+            .one_or_none()
+        )
 
     def _apply_filters(self, query: Query, query_params: UserQueryParams) -> Query:
         """Narrow the user query. Applied before the count so totals match the page."""
@@ -164,7 +209,7 @@ class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal
         column = getattr(model, sort_by_column)
         return [column.asc() if ascending else column.desc()]
 
-    def _connection_summary(self, page_user: Any, query_params: UserQueryParams) -> Any:
+    def _connection_summary(self, page_user: Any, include: Sequence[UserInclude]) -> Any:
         """Lateral aggregate of a single user's connections, evaluated once per page row."""
         connection = aliased(UserConnection)
         last_synced_at = func.max(connection.last_synced_at)
@@ -182,7 +227,7 @@ class UserRepository(CrudRepository[User, UserCreateInternal, UserUpdateInternal
                 "has_active_connection"
             ),
         ]
-        if UserInclude.CONNECTIONS in query_params.include:
+        if UserInclude.CONNECTIONS in include:
             columns.append(
                 func.jsonb_agg(
                     aggregate_order_by(

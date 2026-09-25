@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from logging import Logger, getLogger
 from uuid import UUID
@@ -11,6 +12,7 @@ from app.schemas.model_crud.user_management import (
     UserConnectionSummary,
     UserCreate,
     UserCreateInternal,
+    UserDetailRead,
     UserInclude,
     UserQueryParams,
     UserRead,
@@ -23,7 +25,7 @@ from app.services.providers.garmin.backfill_state import force_release_backfill_
 from app.services.services import AppService
 from app.services.sync_coordination import release_stale_primary
 from app.services.user_connection_service import user_connection_service
-from app.utils.exceptions import ResourceAlreadyExistsError, handle_exceptions
+from app.utils.exceptions import ResourceAlreadyExistsError, ResourceNotFoundError, handle_exceptions
 from app.utils.structured_logging import log_structured
 
 
@@ -114,6 +116,28 @@ class UserService(AppService[UserRepository, User, UserCreateInternal, UserUpdat
             )
 
         return self.crud.delete(db_session, user)
+
+    @handle_exceptions
+    def get_detail(
+        self,
+        db_session: DbSession,
+        user_id: str,
+        include: Sequence[UserInclude] = (),
+    ) -> UserDetailRead:
+        """One user, with the sync projection the list rows carry and the women's health flag."""
+        row = self.crud.get_with_connection_summary(db_session, user_id, include)
+        if row is None:
+            raise ResourceNotFoundError(self.name, user_id)
+
+        user, last_synced_at, last_synced_provider, has_active_connection, connections, has_womens_health_data = row
+        detail = UserDetailRead.model_validate(user)
+        detail.last_synced_at = last_synced_at
+        detail.last_synced_provider = last_synced_provider
+        detail.has_active_connection = bool(has_active_connection)
+        detail.has_womens_health_data = bool(has_womens_health_data)
+        if UserInclude.CONNECTIONS in include:
+            detail.connections = [UserConnectionSummary.model_validate(c) for c in connections or []]
+        return detail
 
     @handle_exceptions
     def get_users_paginated(

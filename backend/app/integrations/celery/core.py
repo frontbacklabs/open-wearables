@@ -145,12 +145,6 @@ def create_celery() -> Celery:
             "args": (),
             "kwargs": {},
         },
-        "gc-stuck-garmin-backfills": {
-            "task": "app.integrations.celery.tasks.garmin.gc_task.gc_stuck_backfills",
-            "schedule": 180.0,  # Every 3 minutes
-            "args": (),
-            "kwargs": {},
-        },
         "run-daily-archival": {
             "task": "app.integrations.celery.tasks.archival_task.run_daily_archival",
             "schedule": crontab(hour=3, minute=0),  # Daily at 03:00 UTC
@@ -166,6 +160,12 @@ def create_celery() -> Celery:
         "fill-missing-resilience-scores": {
             "task": "app.integrations.celery.tasks.fill_missing_resilience_scores_task.fill_missing_resilience_scores",
             "schedule": float(settings.resilience_score_interval_seconds),
+            "args": (),
+            "kwargs": {},
+        },
+        "close-stale-sync-runs": {
+            "task": "app.integrations.celery.tasks.close_stale_sync_runs_task.close_stale_sync_runs",
+            "schedule": float(settings.sync_run_sweep_interval_seconds),
             "args": (),
             "kwargs": {},
         },

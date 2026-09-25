@@ -20,6 +20,10 @@
     {
       "source": "/data-migrations/:slug*",
       "destination": "/dev-guides/data-migrations"
+    },
+    {
+      "source": "/dev-guides/seed-data-generator",
+      "destination": "/developer-portal/settings/seed-data-generator"
     }
   ],
   "navigation": {
@@ -39,6 +43,7 @@
             "group": "Architecture",
             "pages": [
               "architecture/system-overview",
+              "architecture/data-flow",
               "architecture/unified-data-model",
               "architecture/data-types",
               "architecture/multi-account-sync"
@@ -56,7 +61,8 @@
             "group": "Providers",
             "pages": [
               "providers/supported",
-              "providers/coverage"
+              "providers/coverage",
+              "providers/historical-data"
             ]
           },
           {
@@ -69,6 +75,7 @@
             "group": "Mobile SDK",
             "pages": [
               "sdk/index",
+              "sdk/integration",
               {
                 "group": "iOS (Swift)",
                 "pages": [
@@ -114,13 +121,30 @@
             ]
           },
           {
+            "group": "Developer Portal",
+            "pages": [
+              "developer-portal/index",
+              {
+                "group": "Settings",
+                "pages": [
+                  "developer-portal/settings/credentials",
+                  "developer-portal/settings/providers",
+                  "developer-portal/settings/priorities",
+                  "developer-portal/settings/data-lifecycle",
+                  "developer-portal/settings/team",
+                  "developer-portal/settings/change-password",
+                  "developer-portal/settings/seed-data-generator"
+                ]
+              }
+            ]
+          },
+          {
             "group": "Developer Guides",
             "pages": [
               "dev-guides/integration-guide",
               "dev-guides/how-to-add-new-provider",
               "dev-guides/data-migrations",
-              "dev-guides/ngrok-setup",
-              "dev-guides/seed-data-generator"
+              "dev-guides/ngrok-setup"
             ]
           },
           {
@@ -148,7 +172,7 @@
       },
       {
         "tab": "API Reference",
-        "openapi": "https://api.openwearables.io/openapi.json",
+        "openapi": "openapi.json",
         "groups": [
           {
             "group": "Overview",
@@ -205,8 +229,6 @@
             "pages": [
               "POST /api/v1/providers/{provider}/users/{user_id}/sync",
               "GET /api/v1/providers/garmin/users/{user_id}/backfill/status",
-              "POST /api/v1/providers/garmin/users/{user_id}/backfill/cancel",
-              "POST /api/v1/providers/garmin/users/{user_id}/backfill/{type_name}/retry",
               "POST /api/v1/providers/{provider}/users/{user_id}/sync/historical"
             ]
           },
@@ -217,7 +239,8 @@
               "GET /api/v1/users/{user_id}/summaries/sleep",
               "GET /api/v1/users/{user_id}/summaries/body",
               "GET /api/v1/users/{user_id}/summaries/recovery",
-              "GET /api/v1/users/{user_id}/summaries/data"
+              "GET /api/v1/users/{user_id}/summaries/data",
+              "GET /api/v1/users/{user_id}/summaries/data/timeline"
             ]
           },
           {
@@ -294,7 +317,9 @@
               "GET /api/v1/users/{user_id}/sync/stream",
               "GET /api/v1/users/{user_id}/sync/recent",
               "GET /api/v1/users/{user_id}/sync/runs",
-              "GET /api/v1/sync/runs"
+              "GET /api/v1/sync/runs",
+              "GET /api/v1/users/{user_id}/sync/history",
+              "GET /api/v1/sync/history/{run_key}"
             ]
           }
         ]

@@ -5,6 +5,8 @@ from fastapi import APIRouter, Query, status
 from app.database import DbSession
 from app.schemas.model_crud.user_management import (
     UserCreate,
+    UserDetailRead,
+    UserInclude,
     UserQueryParams,
     UserRead,
     UserUpdate,
@@ -32,7 +34,9 @@ async def list_users(
 
 @router.get(
     "/users/{user_id}",
-    response_model=UserRead,
+    response_model=UserDetailRead,
+    # Same as the list: an expansion that was not asked for stays out of the payload.
+    response_model_exclude_unset=True,
     responses={
         401: {
             "description": "Authentication required",
@@ -50,8 +54,20 @@ async def list_users(
         },
     },
 )
-def get_user(user_id: str, db: DbSession, _api_key: ApiKeyDep):
-    return user_service.get(db, user_id, raise_404=True)
+def get_user(
+    user_id: str,
+    db: DbSession,
+    _api_key: ApiKeyDep,
+    include: Annotated[
+        list[UserInclude],
+        Query(
+            default_factory=list,
+            description="Optional expansions to embed; repeat the parameter for several",
+        ),
+    ],
+):
+    """Returns one user with its latest sync state and connection summary."""
+    return user_service.get_detail(db, user_id, include)
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED, response_model=UserRead)

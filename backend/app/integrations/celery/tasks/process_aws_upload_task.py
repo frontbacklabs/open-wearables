@@ -12,13 +12,18 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.integrations.redis_client import get_redis_client
 from app.schemas.providers.apple.apple_xml import CompletedPart
-from app.schemas.sync_status import SyncSource, SyncStatus
+from app.schemas.sync_status import SyncScope, SyncSource, SyncStatus
 from app.services import event_record_service
-from app.services.apple.apple_xml.aws_service import get_s3_client
-from app.services.apple.apple_xml.multipart_upload_service import multipart_upload_service
-from app.services.apple.apple_xml.xml_service import XMLService
-from app.services.apple.healthkit.sleep_service import handle_sleep_data
-from app.services.sync_status_service import completed, failed, new_run_id, started
+from app.services.providers.apple.apple_xml.aws_service import get_s3_client
+from app.services.providers.apple.apple_xml.multipart_upload_service import multipart_upload_service
+from app.services.providers.apple.apple_xml.xml_service import XMLService
+from app.services.sdk.sleep_service import handle_sleep_data
+from app.services.sync_status_service import (
+    emit_sync_completed,
+    emit_sync_failed,
+    emit_sync_started,
+    new_run_id,
+)
 from app.services.timeseries_service import timeseries_service
 from app.services.user_service import user_service
 from app.utils.exceptions import ResourceNotFoundError
@@ -156,11 +161,12 @@ def _run_import_task(
         }
 
     metadata = {"bucket": bucket_name, "object_key": object_key}
-    if task.request.retries == 0:
-        started(
+    if user_id and task.request.retries == 0:
+        emit_sync_started(
             user_id,
             "apple",
             SyncSource.XML_IMPORT,
+            scope=SyncScope.HISTORICAL,
             run_id=run_id,
             message="Importing Apple Health XML file from object storage",
             metadata=metadata,
@@ -176,15 +182,17 @@ def _run_import_task(
             _store_upload_completion(bucket_name, object_key, user_id)
         result = _process_aws_upload(bucket_name, object_key, user_id)
         _store_completed_import(bucket_name, object_key, user_id, result)
-        completed(
-            user_id,
-            "apple",
-            SyncSource.XML_IMPORT,
-            run_id=run_id,
-            status=SyncStatus.SKIPPED if result["status"] == "skipped" else SyncStatus.SUCCESS,
-            message=result.get("message") or result.get("reason") or "Apple Health XML import completed",
-            metadata=metadata,
-        )
+        if user_id:
+            emit_sync_completed(
+                user_id,
+                "apple",
+                SyncSource.XML_IMPORT,
+                scope=SyncScope.HISTORICAL,
+                run_id=run_id,
+                status=SyncStatus.SKIPPED if result["status"] == "skipped" else SyncStatus.SUCCESS,
+                message=result.get("message") or result.get("reason") or "Apple Health XML import completed",
+                metadata=metadata,
+            )
         return result
     except Exception as exc:
         retryable = not isinstance(exc, HTTPException) or exc.status_code >= 500
@@ -193,15 +201,17 @@ def _run_import_task(
             raise task.retry(exc=exc, countdown=min(10 * (2**task.request.retries), 300)) from exc
 
         _release_import_claim(bucket_name, object_key, user_id, run_id)
-        failed(
-            user_id,
-            "apple",
-            SyncSource.XML_IMPORT,
-            run_id=run_id,
-            error=str(exc),
-            message="Apple Health XML import failed",
-            metadata=metadata,
-        )
+        if user_id:
+            emit_sync_failed(
+                user_id,
+                "apple",
+                SyncSource.XML_IMPORT,
+                scope=SyncScope.HISTORICAL,
+                run_id=run_id,
+                error=str(exc),
+                message="Apple Health XML import failed",
+                metadata=metadata,
+            )
         raise
 
 

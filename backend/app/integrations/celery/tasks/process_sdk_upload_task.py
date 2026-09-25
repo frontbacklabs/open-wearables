@@ -5,21 +5,30 @@ from typing import Any
 from celery import shared_task
 
 from app.config import settings
+from app.constants.sdk_providers import sdk_providers
 from app.database import SessionLocal
 from app.models import User
 from app.repositories.user_repository import UserRepository
-from app.schemas.sync_status import SyncSource, SyncStatus
-from app.services.apple.healthkit.import_service import (
+from app.schemas.sync_status import (
+    DataTypeKind,
+    DataTypeOutcome,
+    SyncScope,
+    SyncSource,
+    SyncStatus,
+)
+from app.services.raw_payload_storage import delete_payload_from_s3, get_payload_from_s3
+from app.services.sdk.import_service import (
     ImportService as SDKImportService,
 )
-from app.services.apple.healthkit.import_service import (
+from app.services.sdk.import_service import (
     import_service as sdk_import_service,
 )
-from app.services.raw_payload_storage import (
-    delete_payload_from_s3,
-    get_payload_from_s3,
+from app.services.sync_status_service import (
+    emit_sync_completed,
+    emit_sync_failed,
+    emit_sync_started,
+    try_record_data_types,
 )
-from app.services.sync_status_service import completed, failed, started
 from app.services.user_connection_service import user_connection_service
 from app.utils.structured_logging import log_structured
 
@@ -27,9 +36,36 @@ logger = getLogger(__name__)
 
 
 def _get_import_service(provider: str) -> SDKImportService:
-    if provider in ("apple", "samsung", "google"):
+    if provider in sdk_providers():
         return sdk_import_service
     raise ValueError(f"Unsupported provider: {provider}")
+
+
+def _batch_outcomes(types: list[str], workouts_saved: int, sleep_saved: int, scope: SyncScope) -> list[DataTypeOutcome]:
+    """What this batch wrote, per data type.
+
+    types holds series type slugs only, since the importer collects it from the samples it
+    writes. Workouts and sleep are event records counted separately, so they would go
+    unrecorded without their own entries.
+
+    A historical export gets each type's verdict from the SDK's own end event, so a batch
+    reports IN_PROGRESS and leaves the outcome to it — the two arrive in either order, and
+    a batch claiming success would otherwise bury a reported failure. A live batch is the
+    only report there will be, so it is its own verdict.
+    """
+    status = SyncStatus.IN_PROGRESS if scope == SyncScope.HISTORICAL else SyncStatus.SUCCESS
+    outcomes = [DataTypeOutcome(data_type=data_type, kind=DataTypeKind.SERIES, status=status) for data_type in types]
+    for name, saved in (("workouts", workouts_saved), ("sleep", sleep_saved)):
+        if saved:
+            outcomes.append(
+                DataTypeOutcome(
+                    data_type=name,
+                    kind=DataTypeKind.EVENT,
+                    status=status,
+                    items_inserted=saved,
+                )
+            )
+    return outcomes
 
 
 @shared_task(queue="sdk_sync")
@@ -40,6 +76,8 @@ def process_sdk_upload(
     provider: str,
     batch_id: str | None = None,
     payload_ref: str | None = None,
+    sync_session_id: str | None = None,
+    sync_type: str | None = None,
 ) -> dict[str, Any]:
     """
     Process SDK data import asynchronously.
@@ -49,10 +87,13 @@ def process_sdk_upload(
             payload was offloaded to S3 - see ``payload_ref``.
         content_type: The content type header value
         user_id: User ID to associate with the data
-        provider: Import provider - "apple", "samsung", "google"
+        provider: Import provider - "apple", "samsung", "health_connect"
         batch_id: Unique batch identifier for tracking (optional for backwards compatibility)
         payload_ref: ``s3://bucket/key`` of the stored payload. When set (and ``content`` is
             None) the body is loaded from S3 here, so it never travels through the broker.
+        sync_session_id: Device-generated id shared by every batch of one historical
+            export. Absent on SDK versions that do not send it yet.
+        sync_type: Whether this batch belongs to a historical export or to live sync.
 
     Returns:
         Dictionary with status_code and response message
@@ -92,6 +133,12 @@ def process_sdk_upload(
         )
         return {"status": "error", "reason": "missing_payload", "batch_id": batch_id}
 
+    # A historical export spans many batches, so its run is keyed by the device's session
+    # id. Without one the batch is its own run, which is why live syncs are not persisted.
+    scope = SyncScope.HISTORICAL if sync_type == SyncScope.HISTORICAL and sync_session_id else SyncScope.LIVE
+    run_id = f"sdk_{sync_session_id}" if scope == SyncScope.HISTORICAL else batch_id
+
+
     # Validate user exists before processing
     with SessionLocal() as db:
         user_repo = UserRepository(User)
@@ -118,11 +165,12 @@ def process_sdk_upload(
         provider=provider,
     )
 
-    started(
+    emit_sync_started(
         user_id,
         provider,
         SyncSource.SDK,
-        run_id=batch_id,
+        scope=scope,
+        run_id=run_id,
         message=f"Processing {provider} SDK batch",
         metadata={"batch_id": batch_id},
     )
@@ -175,11 +223,12 @@ def process_sdk_upload(
             )
             if dropped_count:
                 message += f" ({dropped_count} record(s) dropped by validation)"
-            completed(
+            emit_sync_completed(
                 user_id,
                 provider,
                 SyncSource.SDK,
-                run_id=batch_id,
+                scope=scope,
+                run_id=run_id,
                 status=SyncStatus.SUCCESS,
                 message=message,
                 items_processed=items_total,
@@ -194,16 +243,18 @@ def process_sdk_upload(
                     "dropped_count": dropped_count,
                 },
             )
+            try_record_data_types(run_id, _batch_outcomes(types, workouts_saved, sleep_saved, scope), scope=scope)
             if payload_ref and settings.raw_payload_storage == "disabled":
                 # Transport-only copy and the data is committed, so drop it. A failed batch
                 # keeps its payload for diagnosis.
                 delete_payload_from_s3(payload_ref)
         else:
-            failed(
+            emit_sync_failed(
                 user_id,
                 provider,
                 SyncSource.SDK,
-                run_id=batch_id,
+                scope=scope,
+                run_id=run_id,
                 error=str(result.get("response", "Unknown error")),
                 message=f"{provider.capitalize()} batch failed",
                 metadata={"batch_id": batch_id, "status_code": status_code},
