@@ -187,6 +187,11 @@ env:
     SVIX_DSN_SECRET: ren-open-wearables-svix-db-dsn
     # The Cloud Map DNS name from step 1 — where the app/worker reach svix.
     SVIX_SERVER_URL: "http://open-wearables-svix.ren.internal:8071"
+    # CIDRs svix-server may deliver to on top of public space — its worker
+    # filters endpoint DNS answers and drops private IPs unless whitelisted, so
+    # internal endpoints (e.g. data-access.ren.internal) are unreachable without
+    # this. TODO: tighten to the ren-vpc CIDR. IMDS/link-local stays blocked.
+    SVIX_WHITELIST_SUBNETS: '["10.0.0.0/8"]'
 
     # --- Backend runtime config (non-secret) ---
     ENVIRONMENT: production
@@ -782,10 +787,13 @@ phases:
           SVIX_DSN_ARN="$(secret_arn "$SVIX_DSN_SECRET")"
           SVIX_ENVIRONMENT="$(jq -cn \
             --arg redis_dsn "redis://$REDIS_HOST:$REDIS_PORT/1" \
+            --arg whitelist_subnets "$SVIX_WHITELIST_SUBNETS" \
             '[
               {"name":"SVIX_QUEUE_TYPE","value":"redis"},
               {"name":"SVIX_REDIS_DSN","value":$redis_dsn},
-              {"name":"SVIX_CACHE_TYPE","value":"redis"}
+              {"name":"SVIX_CACHE_TYPE","value":"redis"},
+              {"name":"SVIX_ENDPOINT_HTTPS_ONLY","value":"false"},
+              {"name":"SVIX_WHITELIST_SUBNETS","value":$whitelist_subnets}
             ]')"
           SVIX_SECRETS="$(jq -cn \
             --arg dsn "$SVIX_DSN_ARN" \
@@ -812,7 +820,8 @@ phases:
             {"name":"API_PORT","value":$port},
             {"name":"CORS_ALLOW_ALL","value":$cors},
             {"name":"DB_POOL_SIZE","value":"10"},
-            {"name":"DB_MAX_OVERFLOW","value":"5"}
+            {"name":"DB_MAX_OVERFLOW","value":"5"},
+            {"name":"OUTGOING_WEBHOOKS_ENABLED","value":"true"}
           ]' <<<"$SHARED_ENVIRONMENT")"
         # app.sh runs migrations and seed scripts before uvicorn starts, so the
         # first task on a fresh database can take a while to answer the ALB

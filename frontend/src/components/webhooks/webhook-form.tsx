@@ -127,7 +127,9 @@ export function WebhookForm({
             {form.formState.errors.url.message}
           </p>
         )}
-        <p className="text-[10px] text-muted-foreground/70">Must use HTTPS.</p>
+        <p className="text-[10px] text-muted-foreground/70">
+          Must be an HTTP or HTTPS URL.
+        </p>
       </div>
 
       <div className="space-y-1.5">

@@ -3,12 +3,12 @@ import { z } from 'zod';
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const httpsUrl = z
+const webhookUrl = z
   .string()
   .min(1, 'URL is required')
   .url('Please enter a valid URL')
-  .refine((val) => val.startsWith('https://'), {
-    message: 'Webhook URL must use HTTPS',
+  .refine((val) => /^https?:\/\//i.test(val), {
+    message: 'Webhook URL must use HTTP or HTTPS',
   });
 
 const optionalUuid = z
@@ -27,7 +27,7 @@ const optionalDescription = z
   .optional();
 
 export const webhookEndpointFormSchema = z.object({
-  url: httpsUrl,
+  url: webhookUrl,
   description: optionalDescription,
   filter_types: filterTypes,
   user_id: optionalUuid,
