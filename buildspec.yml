@@ -1,7 +1,9 @@
 version: 0.2
 
 # CI/CD: build the backend, worker, beat, and frontend images, push them to ECR,
-# and deploy each to ECS Fargate. Ported from cloudbuild.yaml (Cloud Build ->
+# and deploy each to ECS Fargate. An optional fifth service — a self-hosted
+# Svix server powering OUTGOING webhooks — deploys when SVIX_REGISTRY_ARN is
+# set (see the SVIX_* block below). Ported from cloudbuild.yaml (Cloud Build ->
 # CodeBuild, Artifact Registry -> ECR, Cloud Run -> ECS Fargate, Cloud SQL ->
 # RDS, GCE Redis -> ElastiCache Valkey, Secret Manager -> Secrets Manager).
 #
@@ -20,7 +22,7 @@ version: 0.2
 #     Manager ARN); ECS resolves them at task start, so the task EXECUTION role
 #     needs secretsmanager:GetSecretValue on each referenced secret.
 #
-# Topology: Open Wearables is VPC-internal plumbing for ren-backend. All four
+# Topology: Open Wearables is VPC-internal plumbing for ren-backend. All
 # services deploy into a dedicated open-wearables ECS cluster and run in
 # ren-vpc's private subnets wearing ren-app-sg, which ren-db-sg (5432) and
 # open-wearables-cache-sg (6379) already trust.
@@ -148,6 +150,44 @@ env:
     FRONTEND_CONTAINER_PORT: "3000"
     FRONTEND_LOG_GROUP: /ecs/open-wearables/frontend
 
+    # --- Self-hosted Svix (outgoing webhooks) ---
+    # The delivery engine for OUTGOING webhooks; the app is only a Svix client.
+    # Two independent switches:
+    #   OUTGOING_WEBHOOKS_ENABLED — the app-level flag (emission + management
+    #     API). Wired into SHARED_ENVIRONMENT so the Celery worker gets it too:
+    #     is_enabled() is evaluated in the emitting process and most events
+    #     originate inside worker-run syncs — a backend-only flag would drop
+    #     them silently.
+    #   SVIX_REGISTRY_ARN — when set, this pipeline also deploys the self-hosted
+    #     svix-server service below. Leave empty when pointing SVIX_SERVER_URL
+    #     at an externally hosted Svix instead. Once deployed, clearing the ARN
+    #     only stops managing the service here — scale it to 0 manually.
+    # One-time setup (not managed by this pipeline):
+    #   1. Cloud Map service `open-wearables-svix` in the ren.internal
+    #      namespace (A-record, like backend/frontend) → SVIX_REGISTRY_ARN.
+    #   2. ECR repository SVIX_ECR_REPOSITORY — the build mirrors the pinned
+    #      image into it on the next run.
+    #   3. `CREATE DATABASE svix OWNER ow_app;` on the RDS cluster. The image
+    #      runs its own migrations at boot; ow_app has DDL only inside a
+    #      database it owns — none on the main one.
+    #   4. Secrets Manager secret SVIX_DSN_SECRET holding the full DSN
+    #      (postgresql://ow_app:<password>@<host>:5432/svix). ECS valueFrom
+    #      cannot interpolate a JSON key into a connection string, so the DSN
+    #      is stored whole; the ren-* name keeps it under ren-secrets-read.
+    OUTGOING_WEBHOOKS_ENABLED: "true"
+    SVIX_SERVICE: open-wearables-svix
+    SVIX_TASK_FAMILY: open-wearables-svix
+    SVIX_DESIRED_COUNT: "1"
+    SVIX_CONTAINER_PORT: "8071"
+    SVIX_LOG_GROUP: /ecs/open-wearables/svix
+    SVIX_REGISTRY_ARN: "arn:aws:servicediscovery:us-east-1:948806324983:service/srv-fb7emxq4zot76by7"
+    SVIX_ECR_REPOSITORY: frontbacklabs/svix-server
+    # Keep in sync with the svix/svix-server tag in docker-compose.yml.
+    SVIX_VERSION: "v1.101.0"
+    SVIX_DSN_SECRET: ren-open-wearables-svix-db-dsn
+    # The Cloud Map DNS name from step 1 — where the app/worker reach svix.
+    SVIX_SERVER_URL: "http://open-wearables-svix.ren.internal:8071"
+
     # --- Backend runtime config (non-secret) ---
     ENVIRONMENT: production
     # RDS endpoint hostname. GCP used a Cloud SQL unix socket (/cloudsql/...);
@@ -236,6 +276,11 @@ phases:
           aws ecr describe-repositories --region "$DEPLOY_REGION" \
             --repository-names "$repository" >/dev/null
         done
+        # The svix mirror repo is required only when the service is enabled.
+        if [[ -n "${SVIX_REGISTRY_ARN:-}" ]]; then
+          aws ecr describe-repositories --region "$DEPLOY_REGION" \
+            --repository-names "$SVIX_ECR_REPOSITORY" >/dev/null
+        fi
         aws ecs describe-clusters --region "$DEPLOY_REGION" --clusters "$ECS_CLUSTER" \
           --query 'failures' --output json | jq -e 'length == 0' >/dev/null
         [[ "$(aws elbv2 describe-target-groups --region "$DEPLOY_REGION" \
@@ -285,6 +330,18 @@ phases:
           frontend
         docker push "$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:$IMAGE_TAG"
         docker push "$ECR_REGISTRY/$FRONTEND_ECR_REPOSITORY:latest"
+
+        # Mirror the pinned svix-server image into ECR so tasks never pull from
+        # Docker Hub at launch. ECR tags are immutable, so skip when this
+        # version is already mirrored.
+        if [[ -n "${SVIX_REGISTRY_ARN:-}" ]] && ! aws ecr describe-images \
+            --region "$DEPLOY_REGION" --repository-name "$SVIX_ECR_REPOSITORY" \
+            --image-ids imageTag="$SVIX_VERSION" >/dev/null 2>&1; then
+          docker pull --platform linux/amd64 "svix/svix-server:$SVIX_VERSION"
+          docker tag "svix/svix-server:$SVIX_VERSION" \
+            "$ECR_REGISTRY/$SVIX_ECR_REPOSITORY:$SVIX_VERSION"
+          docker push "$ECR_REGISTRY/$SVIX_ECR_REPOSITORY:$SVIX_VERSION"
+        fi
   post_build:
     on-failure: ABORT
     commands:
@@ -623,6 +680,13 @@ phases:
         # dashboard — nothing else is allowed to reach it).
         grant_ingress "$FRONTEND_SECURITY_GROUP_ID" "$ADMIN_SECURITY_GROUP_ID" "$FRONTEND_CONTAINER_PORT"
 
+        # svix tasks wear ren-app-sg like the rest; a self-rule lets sibling
+        # tasks (backend, worker) reach svix-server on 8071 inside the VPC.
+        if [[ -n "${SVIX_REGISTRY_ARN:-}" ]]; then
+          ensure_log_group "$SVIX_LOG_GROUP"
+          grant_ingress "$BACKEND_SECURITY_GROUP_ID" "$BACKEND_SECURITY_GROUP_ID" "$SVIX_CONTAINER_PORT"
+        fi
+
         # ---------------------------------------------------------------------------
         # RDS connection budget (DB_POOL_SIZE / DB_MAX_OVERFLOW /
         # DB_ASYNC_POOL_SIZE / DB_ASYNC_MAX_OVERFLOW below)
@@ -651,6 +715,8 @@ phases:
           --arg frontend_url "$FRONTEND_URL" \
           --arg api_name "$API_NAME" \
           --arg region "$DEPLOY_REGION" \
+          --arg outgoing_webhooks_enabled "$OUTGOING_WEBHOOKS_ENABLED" \
+          --arg svix_server_url "$SVIX_SERVER_URL" \
           '[
             {"name":"ENVIRONMENT","value":$environment},
             {"name":"DB_HOST","value":$db_host},
@@ -664,7 +730,9 @@ phases:
             {"name":"API_NAME","value":$api_name},
             {"name":"AWS_REGION","value":$region},
             {"name":"DB_ASYNC_POOL_SIZE","value":"0"},
-            {"name":"DB_ASYNC_MAX_OVERFLOW","value":"0"}
+            {"name":"DB_ASYNC_MAX_OVERFLOW","value":"0"},
+            {"name":"OUTGOING_WEBHOOKS_ENABLED","value":$outgoing_webhooks_enabled},
+            {"name":"SVIX_SERVER_URL","value":$svix_server_url}
           ]')"
         # Combined provider secrets are JSON objects; "<arn>:<key>::" resolves a
         # single key. DB creds come from the cluster's RDS-managed secret.
@@ -701,6 +769,42 @@ phases:
           '[.[] | select(.name != "ADMIN_EMAIL" and .name != "ADMIN_PASSWORD")]' \
           <<<"$BACKEND_SECRETS")"
 
+        # --- Svix (outgoing webhooks) ---
+        # Deployed before the backend so the API's startup event-type sync
+        # finds it up. The image's default CMD (launch-svix-server) already
+        # runs migrations then serves, so no command override — which also
+        # keeps the port mapping and health check that register_task_definition
+        # strips in command mode. SVIX_JWT_SECRET reuses SECRET_KEY: the app
+        # derives svix_jwt_secret from it when unset, so both sides must match.
+        if [[ -n "${SVIX_REGISTRY_ARN:-}" ]]; then
+          # No || true on the DSN lookup: deploying svix without it would
+          # produce a crash-looping service — fail the build instead.
+          SVIX_DSN_ARN="$(secret_arn "$SVIX_DSN_SECRET")"
+          SVIX_ENVIRONMENT="$(jq -cn \
+            --arg redis_dsn "redis://$REDIS_HOST:$REDIS_PORT/1" \
+            '[
+              {"name":"SVIX_QUEUE_TYPE","value":"redis"},
+              {"name":"SVIX_REDIS_DSN","value":$redis_dsn},
+              {"name":"SVIX_CACHE_TYPE","value":"redis"}
+            ]')"
+          SVIX_SECRETS="$(jq -cn \
+            --arg dsn "$SVIX_DSN_ARN" \
+            --arg jwt "$(secret_arn "$SECRET_KEY_SECRET")" \
+            '[
+              {"name":"SVIX_DB_DSN","valueFrom":$dsn},
+              {"name":"SVIX_JWT_SECRET","valueFrom":$jwt}
+            ]')"
+          SVIX_TASK_DEFINITION="$(register_task_definition \
+            "$SVIX_TASK_FAMILY" "$SVIX_SERVICE" "$ECR_REGISTRY/$SVIX_ECR_REPOSITORY:$SVIX_VERSION" \
+            "$BACKEND_TASK_ROLE_ARN" "$SVIX_LOG_GROUP" "$SVIX_CONTAINER_PORT" \
+            "svix-server healthcheck http://localhost:$SVIX_CONTAINER_PORT" \
+            "$SVIX_ENVIRONMENT" "$SVIX_SECRETS")"
+          deploy_service "$SVIX_SERVICE" "$SVIX_TASK_DEFINITION" "$SVIX_DESIRED_COUNT" \
+            "$BACKEND_SECURITY_GROUP_ID" "$SVIX_REGISTRY_ARN" \
+            'deploymentCircuitBreaker={enable=true,rollback=true},maximumPercent=200,minimumHealthyPercent=100'
+        fi
+
+        # OUTGOING_WEBHOOKS_ENABLED moved to SHARED_ENVIRONMENT — see above.
         BACKEND_ENVIRONMENT="$(jq -c \
           --arg port "$BACKEND_CONTAINER_PORT" \
           --arg cors "$CORS_ALLOW_ALL" \
@@ -708,8 +812,7 @@ phases:
             {"name":"API_PORT","value":$port},
             {"name":"CORS_ALLOW_ALL","value":$cors},
             {"name":"DB_POOL_SIZE","value":"10"},
-            {"name":"DB_MAX_OVERFLOW","value":"5"},
-            {"name":"OUTGOING_WEBHOOKS_ENABLED","value":"false"}
+            {"name":"DB_MAX_OVERFLOW","value":"5"}
           ]' <<<"$SHARED_ENVIRONMENT")"
         # app.sh runs migrations and seed scripts before uvicorn starts, so the
         # first task on a fresh database can take a while to answer the ALB
