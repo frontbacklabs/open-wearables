@@ -231,6 +231,11 @@ env:
     SECRET_KEY_SECRET: ren-owear-secret-key
     WHOOP_CREDENTIALS_SECRET: ren-whoop-client-credentials
     OURA_CREDENTIALS_SECRET: ren-oura-client-credentials
+    # Withings is the exception to the combined-credentials pattern: the pair
+    # is stored as two plain-string secrets, so their valueFrom is the bare
+    # ARN (no ":<key>::" suffix).
+    WITHINGS_CLIENT_ID_SECRET: ren-withings-client-id
+    WITHINGS_CLIENT_SECRET_SECRET: ren-withings-client-secret
     # Google Health API credentials live in the fitbit-named secret (the name
     # is historical; cloudbuild.yaml mapped it the same way).
     GOOGLE_CREDENTIALS_SECRET: ren-fitbit-client-credentials
@@ -754,6 +759,8 @@ phases:
           --arg google_credentials "$(secret_arn "$GOOGLE_CREDENTIALS_SECRET")" \
           --arg google_project_id "$GOOGLE_PROJECT_ID_ARN" \
           --arg secret_key "$(secret_arn "$SECRET_KEY_SECRET")" \
+          --arg withings_client_id "$(secret_arn "$WITHINGS_CLIENT_ID_SECRET")" \
+          --arg withings_client_secret "$(secret_arn "$WITHINGS_CLIENT_SECRET_SECRET")" \
           '[
             {"name":"DB_USER","valueFrom":($db_credentials + ":username::")},
             {"name":"DB_PASSWORD","valueFrom":($db_credentials + ":password::")},
@@ -763,6 +770,8 @@ phases:
             {"name":"WHOOP_CLIENT_SECRET","valueFrom":($whoop_credentials + ":client_secret::")},
             {"name":"OURA_CLIENT_ID","valueFrom":($oura_credentials + ":client_id::")},
             {"name":"OURA_CLIENT_SECRET","valueFrom":($oura_credentials + ":client_secret::")},
+            {"name":"WITHINGS_CLIENT_ID","valueFrom":$withings_client_id},
+            {"name":"WITHINGS_CLIENT_SECRET","valueFrom":$withings_client_secret},
             {"name":"GOOGLE_CLIENT_ID","valueFrom":($google_credentials + ":client_id::")},
             {"name":"GOOGLE_CLIENT_SECRET","valueFrom":($google_credentials + ":client_secret::")},
             {"name":"SECRET_KEY","valueFrom":$secret_key}
