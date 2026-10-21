@@ -28,3 +28,8 @@ class RefreshToken(BaseDbModel):
 
     last_used_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
+    # ID of the refresh token issued when this one was rotated out. Set only by
+    # rotation, never by explicit revocation: replaying a rotated-out token inside
+    # the grace window returns this successor so a lost refresh response
+    # (suspended app, cancelled request) does not permanently orphan the client.
+    rotated_to_id: Mapped[str_64 | None]

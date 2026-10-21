@@ -2,10 +2,13 @@
 Unit tests for refresh token service.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import RefreshToken
 from app.schemas.auth import TokenType
 from app.services.refresh_token_service import refresh_token_service
@@ -163,6 +166,99 @@ class TestRefreshToken:
         new_db_token = db.query(RefreshToken).filter(RefreshToken.id == result.refresh_token).first()
         assert new_db_token is not None
         assert new_db_token.revoked_at is None
+
+
+class TestRotatedTokenGrace:
+    """Tests for replaying a rotated-out token inside the grace window."""
+
+    def test_rotated_token_replay_returns_successor(self, db: Session) -> None:
+        """A token rotated out moments ago returns its already-issued successor."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        first = refresh_token_service.refresh_token(db, refresh_token)
+
+        # Act - replay the old token, simulating a lost rotation response
+        replay = refresh_token_service.refresh_token(db, refresh_token)
+
+        # Assert - same successor, fresh access token, no further rotation
+        assert replay.refresh_token == first.refresh_token
+        assert replay.access_token is not None
+        assert replay.token_type == "bearer"
+
+    def test_rotated_token_replay_keeps_successor_live(self, db: Session) -> None:
+        """The successor returned by a grace replay is still usable for rotation."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        first = refresh_token_service.refresh_token(db, refresh_token)
+        refresh_token_service.refresh_token(db, refresh_token)  # grace replay
+
+        # Act - client rotates onward from the successor it adopted
+        second = refresh_token_service.refresh_token(db, first.refresh_token)
+
+        # Assert
+        assert second.refresh_token != first.refresh_token
+
+    def test_rotated_token_replay_after_grace_raises_401(self, db: Session) -> None:
+        """A token rotated out longer than the grace window is a hard 401."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        refresh_token_service.refresh_token(db, refresh_token)
+        db_token = db.query(RefreshToken).filter(RefreshToken.id == refresh_token).first()
+        assert db_token is not None
+        db_token.revoked_at = datetime.now(timezone.utc) - timedelta(
+            seconds=settings.refresh_token_rotation_grace_seconds + 60
+        )
+        db.commit()
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            refresh_token_service.refresh_token(db, refresh_token)
+
+        assert exc_info.value.status_code == 401
+
+    def test_explicitly_revoked_token_has_no_grace(self, db: Session) -> None:
+        """A token revoked outside rotation has no successor and stays a hard 401."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        refresh_token_service.revoke_token(db, refresh_token)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            refresh_token_service.refresh_token(db, refresh_token)
+
+        assert exc_info.value.status_code == 401
+
+    def test_replay_follows_rotation_chain_to_live_tail(self, db: Session) -> None:
+        """Replaying a token several rotations deep returns the live tail token."""
+        # Arrange
+        user = UserFactory()
+        first_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        second = refresh_token_service.refresh_token(db, first_token)
+        third = refresh_token_service.refresh_token(db, second.refresh_token)
+
+        # Act - replay the two-deep stale token
+        replay = refresh_token_service.refresh_token(db, first_token)
+
+        # Assert
+        assert replay.refresh_token == third.refresh_token
+
+    def test_replay_after_successor_revoked_raises_401(self, db: Session) -> None:
+        """No grace when the whole chain is dead (e.g. revoke_all_for_user)."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        first = refresh_token_service.refresh_token(db, refresh_token)
+        refresh_token_service.revoke_token(db, first.refresh_token)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            refresh_token_service.refresh_token(db, refresh_token)
+
+        assert exc_info.value.status_code == 401
 
 
 class TestRevokeToken:

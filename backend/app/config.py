@@ -102,6 +102,14 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     token_lifetime: int = 3600
+    # Grace window for replaying a refresh token that was rotated out. Rotation
+    # revokes the old token the moment the new pair is minted, but the response
+    # can be lost in flight (suspended app, cancelled request, dropped
+    # connection); without grace the client is permanently orphaned. Within this
+    # window the already-issued successor is returned instead of a hard 401, so
+    # the retry completes the rotation the client missed. Explicit revocation
+    # never gets grace. 0 disables.
+    refresh_token_rotation_grace_seconds: int = Field(7 * 24 * 3600, ge=0)
 
     # VALIDATION SETTINGS
     min_password_length: int = 8

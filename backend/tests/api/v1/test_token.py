@@ -6,11 +6,14 @@ Tests cover:
 - DELETE /api/v1/token/refresh - revoke refresh token
 """
 
+from datetime import datetime, timedelta, timezone
+
 from jose import jwt
 from sqlalchemy.orm import Session
 from starlette.testclient import TestClient
 
 from app.config import settings
+from app.models import RefreshToken
 from app.services import refresh_token_service
 from tests.factories import ApplicationFactory, DeveloperFactory, UserFactory
 
@@ -119,10 +122,12 @@ class TestRefreshToken:
         # Assert
         assert response.status_code in [400, 422]
 
-    def test_refresh_token_rotation_invalidates_old_token(
+    def test_refresh_token_rotation_replays_successor_within_grace(
         self, client: TestClient, db: Session, api_v1_prefix: str
     ) -> None:
-        """Old refresh token should be invalid after rotation."""
+        """A rotated-out token replayed inside the grace window gets the
+        already-issued successor back, so a client that lost the rotation
+        response recovers instead of orphaning itself."""
         # Arrange
         user = UserFactory()
         old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
@@ -135,12 +140,13 @@ class TestRefreshToken:
         assert response.status_code == 200
         new_refresh_token = response.json()["refresh_token"]
 
-        # Assert - old token should be invalid
+        # Assert - replaying the old token returns the same successor
         response = client.post(
             f"{api_v1_prefix}/token/refresh",
             json={"refresh_token": old_refresh_token},
         )
-        assert response.status_code == 401
+        assert response.status_code == 200
+        assert response.json()["refresh_token"] == new_refresh_token
 
         # Assert - new token should work
         response = client.post(
@@ -148,6 +154,42 @@ class TestRefreshToken:
             json={"refresh_token": new_refresh_token},
         )
         assert response.status_code == 200
+
+    def test_refresh_token_replay_after_grace_returns_401(
+        self, client: TestClient, db: Session, api_v1_prefix: str
+    ) -> None:
+        """A rotated-out token replayed after the grace window stays a 401."""
+        # Arrange
+        user = UserFactory()
+        old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        client.post(f"{api_v1_prefix}/token/refresh", json={"refresh_token": old_refresh_token})
+        db_token = db.query(RefreshToken).filter(RefreshToken.id == old_refresh_token).first()
+        assert db_token is not None
+        db_token.revoked_at = datetime.now(timezone.utc) - timedelta(
+            seconds=settings.refresh_token_rotation_grace_seconds + 60
+        )
+        db.commit()
+
+        # Act & Assert
+        response = client.post(
+            f"{api_v1_prefix}/token/refresh",
+            json={"refresh_token": old_refresh_token},
+        )
+        assert response.status_code == 401
+
+    def test_revoked_token_has_no_grace(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
+        """Explicitly revoked tokens get no grace — only rotation does."""
+        # Arrange
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        client.post(f"{api_v1_prefix}/token/revoke", json={"refresh_token": refresh_token})
+
+        # Act & Assert
+        response = client.post(
+            f"{api_v1_prefix}/token/refresh",
+            json={"refresh_token": refresh_token},
+        )
+        assert response.status_code == 401
 
 
 class TestRevokeRefreshToken:

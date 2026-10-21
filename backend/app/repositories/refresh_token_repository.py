@@ -26,6 +26,19 @@ class RefreshTokenRepository:
         stmt = select(self.model).where(self.model.id == token_id, self.model.revoked_at.is_(None))
         return db_session.execute(stmt).scalar_one_or_none()
 
+    def get_token(self, db_session: DbSession, token_id: str) -> RefreshToken | None:
+        """Get a refresh token by ID regardless of revocation state."""
+        stmt = select(self.model).where(self.model.id == token_id)
+        return db_session.execute(stmt).scalar_one_or_none()
+
+    def rotate_token(self, db_session: DbSession, token: RefreshToken, successor_id: str) -> RefreshToken:
+        """Revoke a token as part of rotation and point it at its successor."""
+        token.revoked_at = datetime.now(timezone.utc)
+        token.rotated_to_id = successor_id
+        db_session.commit()
+        db_session.refresh(token)
+        return token
+
     def get_by_user_id(self, db_session: DbSession, user_id: str) -> list[RefreshToken]:
         """Get all refresh tokens for a user."""
         stmt = select(self.model).where(self.model.user_id == user_id, self.model.revoked_at.is_(None))
@@ -37,7 +50,7 @@ class RefreshTokenRepository:
         return list(db_session.execute(stmt).scalars().all())
 
     def revoke_token(self, db_session: DbSession, token: RefreshToken) -> RefreshToken:
-        """Revoke a single refresh token."""
+        """Revoke a single refresh token (explicit revocation, no successor)."""
         token.revoked_at = datetime.now(timezone.utc)
         db_session.commit()
         db_session.refresh(token)
