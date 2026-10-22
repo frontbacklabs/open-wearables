@@ -26,6 +26,11 @@ class RefreshTokenRepository:
         stmt = select(self.model).where(self.model.id == token_id, self.model.revoked_at.is_(None))
         return db_session.execute(stmt).scalar_one_or_none()
 
+    def get_token(self, db_session: DbSession, token_id: str) -> RefreshToken | None:
+        """Get a refresh token regardless of revocation state."""
+        stmt = select(self.model).where(self.model.id == token_id)
+        return db_session.execute(stmt).scalar_one_or_none()
+
     def get_by_user_id(self, db_session: DbSession, user_id: str) -> list[RefreshToken]:
         """Get all refresh tokens for a user."""
         stmt = select(self.model).where(self.model.user_id == user_id, self.model.revoked_at.is_(None))
@@ -36,9 +41,16 @@ class RefreshTokenRepository:
         stmt = select(self.model).where(self.model.developer_id == developer_id, self.model.revoked_at.is_(None))
         return list(db_session.execute(stmt).scalars().all())
 
-    def revoke_token(self, db_session: DbSession, token: RefreshToken) -> RefreshToken:
-        """Revoke a single refresh token."""
+    def revoke_token(
+        self, db_session: DbSession, token: RefreshToken, rotated_to_id: str | None = None
+    ) -> RefreshToken:
+        """Revoke a single refresh token.
+
+        ``rotated_to_id`` links rotation revocations to their successor so the
+        reuse-window check can walk the chain; explicit revocations leave it NULL.
+        """
         token.revoked_at = datetime.now(timezone.utc)
+        token.rotated_to_id = rotated_to_id
         db_session.commit()
         db_session.refresh(token)
         return token

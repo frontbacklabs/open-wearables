@@ -102,6 +102,9 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
     token_lifetime: int = 3600
+    # How long after rotation a revoked refresh token may re-claim its successor
+    # pair (covers refresh responses lost to background suspension or races).
+    refresh_token_reuse_window_seconds: int = 86400
 
     # VALIDATION SETTINGS
     min_password_length: int = 8

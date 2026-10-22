@@ -28,3 +28,9 @@ class RefreshToken(BaseDbModel):
 
     last_used_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
+    # Set on rotation: id of the refresh token this one was rotated into. Lets a
+    # client that lost the refresh response re-present the revoked predecessor
+    # and receive the live successor instead of a terminal 401. NULL for tokens
+    # revoked explicitly (logout, disconnect, account deletion) — those chains
+    # are dead and stay dead.
+    rotated_to_id: Mapped[str_64 | None]

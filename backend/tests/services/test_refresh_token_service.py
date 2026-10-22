@@ -2,10 +2,13 @@
 Unit tests for refresh token service.
 """
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models import RefreshToken
 from app.schemas.auth import TokenType
 from app.services.refresh_token_service import refresh_token_service
@@ -163,6 +166,108 @@ class TestRefreshToken:
         new_db_token = db.query(RefreshToken).filter(RefreshToken.id == result.refresh_token).first()
         assert new_db_token is not None
         assert new_db_token.revoked_at is None
+
+
+class TestRefreshTokenReuseWindow:
+    """Tests for the rotation grace window: a recently rotated token re-presents its successor."""
+
+    def test_rotation_links_old_token_to_successor(self, db: Session) -> None:
+        """Rotating a token records rotated_to_id on the revoked row."""
+        # Arrange
+        user = UserFactory()
+        old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+
+        # Act
+        result = refresh_token_service.refresh_token(db, old_refresh_token)
+
+        # Assert
+        db_token = db.query(RefreshToken).filter(RefreshToken.id == old_refresh_token).first()
+        assert db_token is not None
+        assert db_token.revoked_at is not None
+        assert db_token.rotated_to_id == result.refresh_token
+
+    def test_reuse_within_window_returns_successor_pair(self, db: Session) -> None:
+        """Re-presenting a recently rotated token returns the live successor, not a 401."""
+        # Arrange
+        user = UserFactory()
+        old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        rotated = refresh_token_service.refresh_token(db, old_refresh_token)
+
+        # Act — simulate the client retrying with the token it already had.
+        result = refresh_token_service.refresh_token(db, old_refresh_token)
+
+        # Assert — same refresh token id as the lost response carried; a fresh access token.
+        assert result.refresh_token == rotated.refresh_token
+        assert result.access_token is not None
+        assert result.token_type == "bearer"
+
+    def test_reuse_walks_chain_to_head(self, db: Session) -> None:
+        """A token several rotations behind resolves to the current chain head."""
+        # Arrange
+        user = UserFactory()
+        t0 = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        r1 = refresh_token_service.refresh_token(db, t0)
+        r2 = refresh_token_service.refresh_token(db, r1.refresh_token)
+
+        # Act — client lost both responses and still holds t0.
+        result = refresh_token_service.refresh_token(db, t0)
+
+        # Assert
+        assert result.refresh_token == r2.refresh_token
+
+    def test_reuse_after_window_raises_401(self, db: Session) -> None:
+        """A rotated token presented past the window still fails."""
+        # Arrange
+        user = UserFactory()
+        old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        refresh_token_service.refresh_token(db, old_refresh_token)
+
+        db_token = db.query(RefreshToken).filter(RefreshToken.id == old_refresh_token).first()
+        db_token.revoked_at = datetime.now(timezone.utc) - timedelta(
+            seconds=settings.refresh_token_reuse_window_seconds + 60
+        )
+        db.commit()
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            refresh_token_service.refresh_token(db, old_refresh_token)
+        assert exc_info.value.status_code == 401
+
+    def test_reuse_when_head_revoked_raises_401(self, db: Session) -> None:
+        """Reuse cannot resurrect a chain whose head was itself revoked."""
+        # Arrange — rotate, then explicitly revoke the successor (e.g. disconnect).
+        user = UserFactory()
+        old_refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        rotated = refresh_token_service.refresh_token(db, old_refresh_token)
+        refresh_token_service.revoke_token(db, rotated.refresh_token)
+
+        # Act & Assert
+        with pytest.raises(HTTPException) as exc_info:
+            refresh_token_service.refresh_token(db, old_refresh_token)
+        assert exc_info.value.status_code == 401
+
+    def test_explicitly_revoked_token_still_raises_401(self, db: Session) -> None:
+        """Tokens revoked outside rotation (logout) have no successor to re-present."""
+        # Covered by test_refresh_revoked_token_raises_401: revoke_token() never sets
+        # rotated_to_id, so the chain walk finds no head.
+        user = UserFactory()
+        refresh_token = refresh_token_service.create_sdk_refresh_token(db, user.id, "test_app")
+        refresh_token_service.revoke_token(db, refresh_token)
+        db_token = db.query(RefreshToken).filter(RefreshToken.id == refresh_token).first()
+        assert db_token.rotated_to_id is None
+
+    def test_reuse_works_for_developer_tokens(self, db: Session) -> None:
+        """Developer refresh tokens get the same reuse-window behavior."""
+        # Arrange
+        developer = DeveloperFactory()
+        old_refresh_token = refresh_token_service.create_developer_refresh_token(db, developer.id)
+        rotated = refresh_token_service.refresh_token(db, old_refresh_token)
+
+        # Act
+        result = refresh_token_service.refresh_token(db, old_refresh_token)
+
+        # Assert
+        assert result.refresh_token == rotated.refresh_token
 
 
 class TestRevokeToken:
