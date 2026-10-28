@@ -231,6 +231,7 @@ env:
     SECRET_KEY_SECRET: ren-owear-secret-key
     WHOOP_CREDENTIALS_SECRET: ren-whoop-client-credentials
     OURA_CREDENTIALS_SECRET: ren-oura-client-credentials
+    GARMIN_CREDENTIALS_SECRET: ren-garmin-client-credentials
     # Withings is the exception to the combined-credentials pattern: the pair
     # is stored as two plain-string secrets, so their valueFrom is the bare
     # ARN (no ":<key>::" suffix).
@@ -756,6 +757,7 @@ phases:
           --arg admin_password "$(secret_arn "$ADMIN_PASSWORD_SECRET")" \
           --arg whoop_credentials "$(secret_arn "$WHOOP_CREDENTIALS_SECRET")" \
           --arg oura_credentials "$(secret_arn "$OURA_CREDENTIALS_SECRET")" \
+          --arg garmin_credentials "$(secret_arn "$GARMIN_CREDENTIALS_SECRET")" \
           --arg google_credentials "$(secret_arn "$GOOGLE_CREDENTIALS_SECRET")" \
           --arg google_project_id "$GOOGLE_PROJECT_ID_ARN" \
           --arg secret_key "$(secret_arn "$SECRET_KEY_SECRET")" \
@@ -770,6 +772,8 @@ phases:
             {"name":"WHOOP_CLIENT_SECRET","valueFrom":($whoop_credentials + ":client_secret::")},
             {"name":"OURA_CLIENT_ID","valueFrom":($oura_credentials + ":client_id::")},
             {"name":"OURA_CLIENT_SECRET","valueFrom":($oura_credentials + ":client_secret::")},
+            {"name":"GARMIN_CLIENT_ID","valueFrom":($garmin_credentials + ":client_id::")},
+            {"name":"GARMIN_CLIENT_SECRET","valueFrom":($garmin_credentials + ":client_secret::")},
             {"name":"WITHINGS_CLIENT_ID","valueFrom":$withings_client_id},
             {"name":"WITHINGS_CLIENT_SECRET","valueFrom":$withings_client_secret},
             {"name":"GOOGLE_CLIENT_ID","valueFrom":($google_credentials + ":client_id::")},
