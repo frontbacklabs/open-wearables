@@ -289,6 +289,12 @@
             ]
           },
           {
+            "group": "Garmin Import",
+            "pages": [
+              "POST /api/v1/users/{user_id}/import/garmin/export"
+            ]
+          },
+          {
             "group": "Mobile SDK",
             "pages": [
               "POST /api/v1/sdk/users/{user_id}/sync",

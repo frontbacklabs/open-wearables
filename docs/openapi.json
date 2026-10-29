@@ -146,10 +146,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Search across first_name, last_name, and email (partial match). A term that is a valid UUID also matches that user's id exactly",
+              "description": "Search across first_name, last_name, and email (partial match). The term also matches a user's ID exactly",
               "title": "Search"
             },
-            "description": "Search across first_name, last_name, and email (partial match). A term that is a valid UUID also matches that user's id exactly"
+            "description": "Search across first_name, last_name, and email (partial match). The term also matches a user's ID exactly"
           },
           {
             "name": "email",
@@ -183,11 +183,11 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter by external user ID. Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+              "description": "Filter by external user ID. Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
               "deprecated": true,
               "title": "External User Id"
             },
-            "description": "Filter by external user ID. Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+            "description": "Filter by external user ID. Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
             "deprecated": true
           },
           {
@@ -403,7 +403,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -469,16 +468,6 @@
               }
             }
           },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "example": {
-                  "detail": "Input should be a valid UUID"
-                }
-              }
-            }
-          },
           "422": {
             "description": "Validation Error",
             "content": {
@@ -496,6 +485,7 @@
           "External: Users"
         ],
         "summary": "Delete User",
+        "description": "Delete a user and, by cascade, all of their data.\n\nTakes an API key rather than a developer token so the systems that create users\nserver-to-server can also remove them: the user table mirrors the calling system's\none-to-one, and a mirror that can only be added to drifts the moment anything is\ndeleted upstream. ApiKeyDep still accepts a developer JWT, so dashboard callers are\nunaffected.",
         "operationId": "delete_user_api_v1_users__user_id__delete",
         "security": [
           {
@@ -509,7 +499,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -558,6 +547,7 @@
           "External: Users"
         ],
         "summary": "Update User",
+        "description": "Update a user's profile fields.\n\nOn an API key for the same reason as delete: a system that mirrors its users here\nhas to be able to push a profile change through, not just the create. ApiKeyDep also\naccepts a developer JWT, so dashboard callers are unaffected.",
         "operationId": "update_user_api_v1_users__user_id__patch",
         "security": [
           {
@@ -571,7 +561,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -646,7 +635,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -715,7 +703,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -781,7 +768,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -847,7 +833,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -983,7 +968,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1045,6 +1029,17 @@
               "minimum": 1,
               "default": 50,
               "title": "Limit"
+            }
+          },
+          {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(asc|desc)$",
+              "default": "asc",
+              "title": "Sort Order"
             }
           },
           {
@@ -1108,7 +1103,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1173,6 +1167,17 @@
             }
           },
           {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(asc|desc)$",
+              "default": "asc",
+              "title": "Sort Order"
+            }
+          },
+          {
             "name": "X-Open-Wearables-API-Key",
             "in": "header",
             "required": false,
@@ -1233,7 +1238,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1334,7 +1338,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1443,7 +1446,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1590,7 +1592,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -1752,6 +1753,20 @@
             }
           },
           {
+            "name": "sort_order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "asc",
+              "title": "Sort Order"
+            }
+          },
+          {
             "name": "X-Open-Wearables-API-Key",
             "in": "header",
             "required": false,
@@ -1812,7 +1827,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2048,7 +2062,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2117,7 +2130,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2349,7 +2361,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2539,7 +2550,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2607,7 +2617,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2675,7 +2684,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2743,7 +2751,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -2911,7 +2918,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "description": "User ID to connect",
               "title": "User Id"
             },
@@ -3407,7 +3413,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -3632,7 +3637,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -3709,7 +3713,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -3790,7 +3793,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -3865,7 +3867,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -3946,7 +3947,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -4040,8 +4040,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "format": "uuid"
+                  "type": "string"
                 },
                 {
                   "type": "null"
@@ -4171,7 +4170,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -4419,7 +4417,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -4628,7 +4625,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -5190,6 +5186,84 @@
         }
       }
     },
+    "/api/v1/users/{user_id}/import/garmin/export": {
+      "post": {
+        "tags": [
+          "External: Garmin Import"
+        ],
+        "summary": "Import Garmin Export",
+        "description": "Import Garmin export files for a connected user.\n\nRequires an active Garmin connection: imported records are attributed to\nthe ``garmin`` provider, and a connection is what scopes that provenance.",
+        "operationId": "import_garmin_export_api_v1_users__user_id__import_garmin_export_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "X-Open-Wearables-API-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Open-Wearables-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_garmin_export_api_v1_users__user_id__import_garmin_export_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Import Garmin Export Api V1 Users  User Id  Import Garmin Export Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sdk/users/{user_id}/logs": {
       "post": {
         "tags": [
@@ -5210,7 +5284,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           },
@@ -6961,7 +7034,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           }
@@ -7027,7 +7099,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "title": "User Id"
             }
           }
@@ -7194,7 +7265,6 @@
             "required": true,
             "schema": {
               "type": "string",
-              "format": "uuid",
               "description": "User ID",
               "title": "User Id"
             },
@@ -11009,6 +11079,23 @@
         "type": "object",
         "title": "Body_create_api_key_api_v1_developer_api_keys_post"
       },
+      "Body_import_garmin_export_api_v1_users__user_id__import_garmin_export_post": {
+        "properties": {
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files"
+        ],
+        "title": "Body_import_garmin_export_api_v1_users__user_id__import_garmin_export_post"
+      },
       "Body_import_xml_file_api_v1_users__user_id__import_apple_xml_direct_post": {
         "properties": {
           "file": {
@@ -11300,7 +11387,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -11786,8 +11872,7 @@
           "user_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -11841,8 +11926,7 @@
           "user_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -11913,8 +11997,7 @@
           "user_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -12510,7 +12593,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           }
         },
@@ -14756,7 +14838,9 @@
           "efficiency_percent": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -15091,6 +15175,19 @@
             "title": "Time In Bed Minutes",
             "description": "Total time in bed excluding naps",
             "example": 480
+          },
+          "sleep_latency_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sleep Latency Seconds",
+            "description": "Sleep-onset latency for the longest main-sleep session",
+            "example": 300
           },
           "efficiency_percent": {
             "anyOf": [
@@ -15548,7 +15645,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -15666,7 +15762,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -15777,7 +15872,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -15854,8 +15948,7 @@
           "primary_user_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -15923,6 +16016,7 @@
           "sdk",
           "backfill",
           "xml_import",
+          "garmin_export",
           "linked_account"
         ],
         "title": "SyncSource",
@@ -15973,7 +16067,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -16057,8 +16150,7 @@
           "primary_user_id": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "uuid"
+                "type": "string"
               },
               {
                 "type": "null"
@@ -16648,13 +16740,12 @@
           "status"
         ],
         "title": "UserConnectionSummary",
-        "description": "Compact per-provider connection state, embedded in user list rows."
+        "description": "Compact per-provider connection state.\n\nEmbedded in user list rows."
       },
       "UserConnectionWithCapabilities": {
         "properties": {
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "provider": {
@@ -16779,8 +16870,7 @@
           },
           "linked_user_ids": {
             "items": {
-              "type": "string",
-              "format": "uuid"
+              "type": "string"
             },
             "type": "array",
             "title": "Linked User Ids"
@@ -16801,6 +16891,13 @@
       },
       "UserCreate": {
         "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Id",
+            "description": "The user's id in the calling system (a Firebase UID for Ren). Required and never generated here: the Open Wearables user table is a one-to-one mirror of the caller's user table keyed on the same id."
+          },
           "first_name": {
             "anyOf": [
               {
@@ -16847,11 +16944,14 @@
               }
             ],
             "title": "External User Id",
-            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
             "deprecated": true
           }
         },
         "type": "object",
+        "required": [
+          "id"
+        ],
         "title": "UserCreate"
       },
       "UserDataSummaryResponse": {
@@ -16940,7 +17040,6 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid",
             "title": "Id"
           },
           "created_at": {
@@ -16992,7 +17091,7 @@
               }
             ],
             "title": "External User Id",
-            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
             "deprecated": true
           },
           "last_synced_at": {
@@ -17061,7 +17160,7 @@
           "connections"
         ],
         "title": "UserInclude",
-        "description": "Optional expansions for user read models, requested via the `include` query parameter."
+        "description": "Optional expansions for user read models.\n\nRequested through the `include` query parameter."
       },
       "UserInvitationCodeRead": {
         "properties": {
@@ -17076,7 +17175,6 @@
           },
           "user_id": {
             "type": "string",
-            "format": "uuid",
             "title": "User Id"
           },
           "expires_at": {
@@ -17122,7 +17220,6 @@
         "properties": {
           "id": {
             "type": "string",
-            "format": "uuid",
             "title": "Id"
           },
           "created_at": {
@@ -17174,7 +17271,7 @@
               }
             ],
             "title": "External User Id",
-            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
             "deprecated": true
           },
           "last_synced_at": {
@@ -17278,7 +17375,7 @@
               }
             ],
             "title": "External User Id",
-            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id - they all require the Open Wearables UUID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the UUID returned by POST /users in your own system instead.",
+            "description": "Deprecated: no data-fetching endpoint (timeseries, workouts, sleep, summaries, health-scores, etc.) accepts external_user_id. They all require the Open Wearables user ID. This field was added early in the project but never wired into those endpoints, so it only works as a filter on GET /users. Store the ID returned by POST /users in your own system instead.",
             "deprecated": true
           }
         },
