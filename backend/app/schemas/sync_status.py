@@ -24,6 +24,7 @@ class SyncSource(StrEnum):
     SDK = "sdk"  # Mobile SDK upload (Apple HealthKit, Samsung Health, ...)
     BACKFILL = "backfill"  # Garmin webhook-based historical backfill
     XML_IMPORT = "xml_import"  # Apple Health XML upload
+    GARMIN_EXPORT = "garmin_export"  # Garmin "Export Your Data" ZIP upload
     LINKED_ACCOUNT = (
         "linked_account"  # Data received via fan-out from another OW profile sharing the same provider account
     )
