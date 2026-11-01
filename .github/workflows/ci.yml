@@ -54,6 +54,14 @@ jobs:
       - name: Install dependencies
         working-directory: backend
         run: uv sync
+      - name: Install production dependencies (as in backend/Dockerfile)
+        working-directory: backend
+        run: uv sync --locked --no-dev --extra otel
+      - name: Import app with production dependencies
+        working-directory: backend
+        env:
+          SECRET_KEY: test-secret-key-for-ci
+        run: uv run --no-sync python -c "import app.database, app.main"
 
   backend-code-quality:
     needs: changes
