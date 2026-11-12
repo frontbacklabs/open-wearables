@@ -177,15 +177,35 @@ class GoogleWebhookHandler(BaseWebhookHandler):
             try:
                 results.append(self._process_one(db, item, trace_id))
             except Exception as e:
+                context = self._user_context(db, item)
                 log_and_capture_error(
                     e,
                     logger,
                     f"Google webhook notification failed: {e}",
-                    extra={"provider": "google_health", "trace_id": trace_id},
+                    extra={"provider": "google_health", "trace_id": trace_id, **context},
                 )
-                results.append({"status": "error", "error": str(e)})
+                results.append({"status": "error", "error": str(e), **context})
         records = sum(int(r.get("records_saved") or 0) for r in results)
         return {"status": "processed", "notifications": len(items), "records_saved": records, "results": results}
+
+    def _user_context(self, db: DbSession, item: Any) -> dict[str, str]:
+        """Best-effort user/data_type attribution for a notification that raised.
+
+        ``_process_one`` only learns the OW user after validation and the connection
+        lookup, so an exception mid-processing loses that context; re-derive it here
+        so the failed delivery can still be recorded against the right user. Returns
+        {} when it cannot be recovered (e.g. the session itself is broken).
+        """
+        try:
+            notification = GoogleWebhookNotification.model_validate(item)
+            connection = self.connection_repo.get_by_provider_user_id(
+                db, "google_health", notification.data.health_user_id
+            )
+        except Exception:
+            return {}
+        if connection is None:
+            return {}
+        return {"user_id": str(connection.user_id), "data_type": notification.data.data_type}
 
     def _process_one(self, db: DbSession, item: Any, trace_id: str) -> dict[str, Any]:
         """Resolve the user, fetch the changed data over its intervals, and persist it."""
