@@ -186,6 +186,21 @@ class TestRollup:
             (datetime(2026, 11, 16, 5, tzinfo=timezone.utc), "-05:00", Decimal("2055"))
         ]
 
+    def test_with_the_rollup_off_the_days_rows_are_deleted_for_reads_to_count_the_samples(self, db: Session) -> None:
+        # Arrange
+        source = _source()
+        _steps(source, _MORNING, "1900")
+        _steps(source, _EVENING, "155")
+        SeriesRollupRepository().roll_up(db, source.id, [date(2026, 11, 16), date(2026, 11, 17)])
+        ArchivalSettingRepository().get(db).rollup_enabled = False
+        db.flush()
+
+        # Act
+        backfill(db, {source.user_id: NEW_YORK}, dry_run=False)
+
+        # Assert
+        assert db.query(SeriesAggregate).filter(SeriesAggregate.data_source_id == source.id).count() == 0
+
     def test_days_retention_has_reached_keep_their_samples_and_rows(self, db: Session) -> None:
         # Arrange
         source = _source()

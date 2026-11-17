@@ -14,9 +14,10 @@ device. Like the SDK, it can't know where a sample was recorded, so samples from
 zone. Samples that carry an offset, pre-aggregated daily totals, other providers' samples and events
 (sleep, workouts) are left alone. A zone PostgreSQL doesn't know is reported and its user skipped.
 
-With the rollup on, the day rows rolled up under the UTC reading are deleted and the old (UTC) and new
-local day of every changed sample rolled up again in the same transaction as the samples, so a sample is
-never left corrected without its days; the days are queued as well, for the reconcile. Days retention has
+The day rows of the old (UTC) and new local day of every changed sample are deleted in the same
+transaction as the samples. With the rollup on, those days are rolled up again there too, so a sample is
+never left corrected without its days; with it off, reads count them from the samples. The days are queued
+as well, for the reconcile. Days retention has
 reached (before its cutoff, or the day it has deleted samples before) keep their rows, their only history:
 samples within a day of that floor keep no offset. One source is changed a week at a time and each week
 commits on its own, so a run can be interrupted and run again: only samples still without an offset are
@@ -96,12 +97,14 @@ _UPDATE = text(
 
 # The rows rolled up while the samples read as UTC. The rollup keeps a day row whose samples are all gone, so a
 # UTC day the samples left entirely (the evening of the last day, or of a day before a gap) would keep its row.
-_DELETE_UTC_DAYS = text("""
+_DELETE_DAYS = text("""
     DELETE FROM series_aggregate a
     USING unnest(CAST(:days AS date[]), CAST(:type_ids AS integer[])) AS stale(day, type_id)
     WHERE a.data_source_id = :source_id AND a.computed_by = :computed_by AND a.period_kind = :period_kind
-        AND a.series_type_definition_id = stale.type_id AND a.zone_offset = '+00:00'
-        AND a.period_start = (stale.day::timestamp AT TIME ZONE 'UTC')
+        AND a.series_type_definition_id = stale.type_id
+        AND a.period_start BETWEEN (stale.day::timestamp AT TIME ZONE 'UTC') - interval '1 day'
+            AND (stale.day::timestamp AT TIME ZONE 'UTC') + interval '1 day'
+        AND ((a.period_start AT TIME ZONE 'UTC') + a.zone_offset::interval)::date = stale.day
 """)
 
 
@@ -177,11 +180,11 @@ def _backfill_source(
         samples += sum(row.samples for row in rows)
         moved += sum(row.samples for row in rows if row.old_day != row.new_day)
         if not dry_run:
-            stale = sorted({(row.old_day, row.type_id) for row in rows})
-            days = {day for row in rows for day in (row.old_day, row.new_day)}
-            if stale and rollup:
+            stale = sorted({(day, row.type_id) for row in rows for day in (row.old_day, row.new_day)})
+            days = {day for day, _ in stale}
+            if stale:
                 db.execute(
-                    _DELETE_UTC_DAYS,
+                    _DELETE_DAYS,
                     {
                         "source_id": source_id,
                         "days": [day for day, _ in stale],
@@ -190,6 +193,7 @@ def _backfill_source(
                         "period_kind": PeriodKind.DAY,
                     },
                 )
+            if stale and rollup:
                 SeriesRollupRepository().roll_up(db, source_id, days, frozen_before)
             mark_dirty_days(db, {(source_id, day) for day in days})
             db.commit()
