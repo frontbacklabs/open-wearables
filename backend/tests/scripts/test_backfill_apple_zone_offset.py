@@ -7,10 +7,12 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.integrations.rollup_queue import pop_dirty_days
-from app.models import SeriesAggregate, SeriesSample
+from app.models import ArchivalSetting, SeriesAggregate, SeriesSample
+from app.repositories.archival_repository import ArchivalSettingRepository
 from app.repositories.series_rollup_repository import SeriesRollupRepository
 from app.schemas.enums.provider import ProviderName
 from tests.factories import DataPointSeriesFactory, DataSourceFactory, SeriesTypeDefinitionFactory, UserFactory
@@ -35,6 +37,12 @@ NEW_YORK = "America/New_York"
 # 20:00 on Nov 16 in New York, already Nov 17 in UTC.
 _EVENING = datetime(2026, 11, 17, 1, 0, tzinfo=timezone.utc)
 _MORNING = datetime(2026, 11, 16, 14, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _rollup_on(db: Session) -> None:
+    db.merge(ArchivalSetting(id=1, rollup_enabled=True, delete_after_days=None, deleted_before=None))
+    db.flush()
 
 
 def _source(provider: ProviderName = ProviderName.APPLE) -> Any:
@@ -161,18 +169,15 @@ class TestRollup:
         # Assert
         assert set(pop_dirty_days(100)) == {(source.id, date(2026, 11, 16)), (source.id, date(2026, 11, 17))}
 
-    def test_the_rollup_moves_the_evening_onto_its_local_day(self, db: Session) -> None:
+    def test_the_evening_moves_onto_its_local_day_in_the_same_run(self, db: Session) -> None:
         # Arrange: rolled up while the samples read as UTC, the evening sits on Nov 17.
         source = _source()
         _steps(source, _MORNING, "1900")
         _steps(source, _EVENING, "155")
-        repo = SeriesRollupRepository()
-        repo.roll_up(db, source.id, [date(2026, 11, 16), date(2026, 11, 17)])
-        pop_dirty_days(100)
+        SeriesRollupRepository().roll_up(db, source.id, [date(2026, 11, 16), date(2026, 11, 17)])
 
         # Act
         backfill(db, {source.user_id: NEW_YORK}, dry_run=False)
-        repo.roll_up(db, source.id, [day for _, day in pop_dirty_days(100)])
 
         # Assert
         db.expire_all()
@@ -180,6 +185,24 @@ class TestRollup:
         assert [(row.period_start, row.zone_offset, row.sum) for row in rows] == [
             (datetime(2026, 11, 16, 5, tzinfo=timezone.utc), "-05:00", Decimal("2055"))
         ]
+
+    def test_days_retention_has_reached_keep_their_samples_and_rows(self, db: Session) -> None:
+        # Arrange
+        source = _source()
+        old = _steps(source, datetime(2026, 11, 2, 1, tzinfo=timezone.utc))
+        edge = _steps(source, datetime(2026, 11, 10, 1, tzinfo=timezone.utc))
+        recent = _steps(source, _EVENING)
+        SeriesRollupRepository().roll_up(db, source.id, [date(2026, 11, 2)])
+        ArchivalSettingRepository().get(db).deleted_before = date(2026, 11, 10)
+        db.flush()
+
+        # Act
+        backfill(db, {source.user_id: NEW_YORK}, dry_run=False)
+
+        # Assert
+        assert [_offset(db, s) for s in (old, edge, recent)] == [None, None, "-05:00"]
+        rows = db.query(SeriesAggregate).filter(SeriesAggregate.data_source_id == source.id).all()
+        assert (datetime(2026, 11, 2, tzinfo=timezone.utc), "+00:00") in [(r.period_start, r.zone_offset) for r in rows]
 
 
 class TestReadZones:

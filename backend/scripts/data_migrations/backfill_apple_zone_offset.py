@@ -14,11 +14,13 @@ device. Like the SDK, it can't know where a sample was recorded, so samples from
 zone. Samples that carry an offset, pre-aggregated daily totals, other providers' samples and events
 (sleep, workouts) are left alone. A zone PostgreSQL doesn't know is reported and its user skipped.
 
-The day rows rolled up under the UTC reading are deleted, and the old (UTC) and new local day of every
-changed sample are queued for the rollup, which rebuilds them; reads fall back to the samples meanwhile.
-One source is changed a week at a time and each week commits on its own, so a run can be interrupted and
-run again: only samples still without an offset are touched, which also makes the script idempotent.
-Not wired into startup, since it needs the zones as input.
+With the rollup on, the day rows rolled up under the UTC reading are deleted and the old (UTC) and new
+local day of every changed sample rolled up again in the same transaction as the samples, so a sample is
+never left corrected without its days; the days are queued as well, for the reconcile. Days retention has
+reached (before its cutoff, or the day it has deleted samples before) keep their rows, their only history:
+samples within a day of that floor keep no offset. One source is changed a week at a time and each week
+commits on its own, so a run can be interrupted and run again: only samples still without an offset are
+touched, which also makes the script idempotent. Not wired into startup, since it needs the zones as input.
 
 Usage (inside Docker):
     docker compose exec app uv run python scripts/data_migrations/backfill_apple_zone_offset.py \\
@@ -30,7 +32,7 @@ Usage (inside Docker):
 import argparse
 import csv
 from collections.abc import Iterable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -39,10 +41,13 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.integrations.rollup_queue import mark_dirty_days
-from app.repositories.local_day import every_series_type_sql
+from app.repositories.archival_repository import ArchivalSettingRepository
+from app.repositories.local_day import every_series_type_sql, utc_midnight
+from app.repositories.series_rollup_repository import SeriesRollupRepository
 from app.schemas.enums import ComputedBy, PeriodKind, ProviderName
 
 WINDOW = timedelta(days=7)
+_NO_FLOOR = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 _KNOWN_ZONE = text("SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = :zone)")
 
@@ -52,7 +57,7 @@ _UNSET = "s.zone_offset IS NULL AND s.is_daily_total IS NOT TRUE"
 
 _SPAN = text(f"""
     SELECT min(s.recorded_at) AS first_at, max(s.recorded_at) AS last_at
-    FROM series_sample s WHERE s.data_source_id = :source_id AND {_UNSET}
+    FROM series_sample s WHERE s.data_source_id = :source_id AND s.recorded_at >= :since AND {_UNSET}
 """)  # noqa: S608
 
 # The zone's offset at each sample's own instant, as '+HH:MM'.
@@ -66,7 +71,7 @@ _TARGETS = f"""
                 AS m
         FROM series_sample s
         WHERE s.data_source_id = :source_id AND {every_series_type_sql("s")}
-            AND s.recorded_at >= :lo AND s.recorded_at < :hi AND {_UNSET}
+            AND s.recorded_at >= greatest(:lo, :since) AND s.recorded_at < :hi AND {_UNSET}
     ) offsets
 """  # noqa: S608
 
@@ -118,6 +123,8 @@ def read_zones(pairs: Iterable[str], zones_file: Path | None) -> dict[str, str]:
 
 def backfill_apple_zone_offset(db: Session, zones: dict[str, str], *, dry_run: bool) -> dict[str, int]:
     """Set the offset of every listed user's Apple samples that lack one, a committed week at a time."""
+    setting = ArchivalSettingRepository().get(db)
+    since = _since(setting.delete_after_days, setting.deleted_before)
     counts = {"users": 0, "unknown_zone": 0, "no_apple_source": 0, "sources": 0, "samples": 0, "days_moved": 0}
     for user_id, zone in zones.items():
         if not db.execute(_KNOWN_ZONE, {"zone": zone}).scalar():
@@ -130,28 +137,49 @@ def backfill_apple_zone_offset(db: Session, zones: dict[str, str], *, dry_run: b
             counts["no_apple_source"] += 1
         for source_id in sources:
             counts["sources"] += 1
-            samples, moved = _backfill_source(db, source_id, zone, dry_run=dry_run)
+            samples, moved = _backfill_source(
+                db, source_id, zone, since, setting.deleted_before, rollup=setting.rollup_enabled, dry_run=dry_run
+            )
             counts["samples"] += samples
             counts["days_moved"] += moved
     print(("Would change: " if dry_run else "Changed: ") + "  ".join(f"{k}={v}" for k, v in counts.items()))
     return counts
 
 
-def _backfill_source(db: Session, source_id: UUID, zone: str, *, dry_run: bool) -> tuple[int, int]:
-    span = db.execute(_SPAN, {"source_id": source_id}).one()
+def _since(delete_after_days: int | None, deleted_before: date | None) -> datetime:
+    """The first instant whose sample keeps both its old and new day past retention's reach."""
+    floors = [deleted_before] if deleted_before is not None else []
+    if delete_after_days:
+        floors.append(date.today() - timedelta(days=delete_after_days))
+    # A local day is at most a day from the UTC one, so a sample from the day after the floor stays past it.
+    return utc_midnight(max(floors) + timedelta(days=1)) if floors else _NO_FLOOR
+
+
+def _backfill_source(
+    db: Session,
+    source_id: UUID,
+    zone: str,
+    since: datetime,
+    frozen_before: date | None,
+    *,
+    rollup: bool,
+    dry_run: bool,
+) -> tuple[int, int]:
+    span = db.execute(_SPAN, {"source_id": source_id, "since": since}).one()
     if span.first_at is None:
         return 0, 0
     samples = moved = 0
     lo: datetime = span.first_at
     while lo <= span.last_at:
         hi = lo + WINDOW
-        params = {"source_id": source_id, "zone": zone, "lo": lo, "hi": hi}
+        params = {"source_id": source_id, "zone": zone, "lo": lo, "hi": hi, "since": since}
         rows = db.execute(_PREVIEW if dry_run else _UPDATE, params).all()
         samples += sum(row.samples for row in rows)
         moved += sum(row.samples for row in rows if row.old_day != row.new_day)
         if not dry_run:
             stale = sorted({(row.old_day, row.type_id) for row in rows})
-            if stale:
+            days = {day for row in rows for day in (row.old_day, row.new_day)}
+            if stale and rollup:
                 db.execute(
                     _DELETE_UTC_DAYS,
                     {
@@ -162,8 +190,8 @@ def _backfill_source(db: Session, source_id: UUID, zone: str, *, dry_run: bool) 
                         "period_kind": PeriodKind.DAY,
                     },
                 )
-            days = {(source_id, row.old_day) for row in rows} | {(source_id, row.new_day) for row in rows}
-            mark_dirty_days(db, days)
+                SeriesRollupRepository().roll_up(db, source_id, days, frozen_before)
+            mark_dirty_days(db, {(source_id, day) for day in days})
             db.commit()
         lo = hi
     return samples, moved
