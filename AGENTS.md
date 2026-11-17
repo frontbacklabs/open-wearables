@@ -339,3 +339,17 @@ fork divergence.
     breaks every Ren ingest refresh (401s on a route the dashboard still calls
     fine). Candidate for upstreaming; until then keep `ApiKeyDep` on the GET
     through merges.
+19. **Sleep refresh resolves a window held by another record.** In
+    `EventRecordService._create_or_merge_sleep_inner`'s same-external_id refresh
+    path, before the stored record's bounds update, a `get_by_window` lookup finds
+    a second record already holding the refreshed `(data_source_id, start, end)`.
+    `ix_event_record_source_time` spans every non-meal category, so the holder
+    may be a duplicate sleep session — absorbed via
+    `aggregate_repo.move_record` + `delete_flush` before the update flushes — or
+    an unrelated event (workout, menstrual cycle, activity), in which case the
+    stored bounds stand and only the detail refreshes. Upstream's refresh
+    updates bounds unconditionally: against a duplicate sleep it collides with
+    `ix_event_record_source_time` (seen in prod on the `google_health` pull),
+    and a naive absorb would delete the unrelated event. Candidate for
+    upstreaming; keep the resolution through merges until upstream guards the
+    collision.

@@ -1252,6 +1252,115 @@ class TestCreateOrMergeSleep:
 
         assert not db.query(HealthScore).filter(HealthScore.provider == ProviderName.WHOOP).all()
 
+    def test_a_refreshed_session_absorbs_the_duplicate_already_at_its_window(self, db: Session) -> None:
+        """The provider re-sends a session with bounds a second record already holds —
+        the same night stored once under another external_id. Updating the matched
+        record to the new window must not collide on ix_event_record_source_time:
+        the duplicate is absorbed instead."""
+        data_source = DataSourceFactory()
+        matched = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            external_id="night-1",
+            start_datetime=self._dt(23, 0),
+            end_datetime=self._dt(6, 0, day=22),
+        )
+        duplicate = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            external_id="night-2",
+            start_datetime=self._dt(22, 0),
+            end_datetime=self._dt(7, 0, day=22),
+        )
+        heart_rate = get_series_type_id(SeriesType.heart_rate)
+        aggregates = AggregateRepository(EventRecordAggregate)
+        aggregates.upsert(
+            db,
+            [
+                {
+                    "record_id": duplicate.id,
+                    "series_type_definition_id": heart_rate,
+                    "computed_by": ComputedBy.PROVIDER,
+                    "min": Decimal("48"),
+                    "count": 1,
+                }
+            ],
+        )
+        # The refreshed night-1 now reports the window the duplicate already holds.
+        record = self._record(data_source, self._dt(22, 0), self._dt(7, 0, day=22)).model_copy(
+            update={"external_id": "night-1"}
+        )
+
+        result = event_record_service.create_or_merge_sleep(
+            db, data_source.user_id, record, self._detail(record.id), self.THRESHOLD
+        )
+        db.commit()
+
+        assert result.id == matched.id
+        db.expire_all()
+        assert result.start_datetime == self._dt(22, 0)
+        assert result.end_datetime == self._dt(7, 0, day=22)
+        assert db.get(EventRecord, duplicate.id) is None
+        # The duplicate's session values moved onto the surviving record.
+        row = db.query(EventRecordAggregate).filter(EventRecordAggregate.record_id == matched.id).one()
+        assert row.min == Decimal("48")
+
+    def test_a_refreshed_session_keeps_its_window_when_a_workout_holds_it(self, db: Session) -> None:
+        """The unique index spans every non-meal category: a workout already at the refreshed
+        window is not a duplicate sleep. The refresh keeps its stored bounds instead of
+        deleting the unrelated event or stealing its aggregates."""
+        data_source = DataSourceFactory()
+        sleep = EventRecordFactory(
+            mapping=data_source,
+            category="sleep",
+            type_="sleep_session",
+            external_id="nap-1",
+            start_datetime=self._dt(23, 0),
+            end_datetime=self._dt(6, 0, day=22),
+        )
+        workout = EventRecordFactory(
+            mapping=data_source,
+            category="workout",
+            type_="running",
+            start_datetime=self._dt(22, 0),
+            end_datetime=self._dt(7, 0, day=22),
+        )
+        heart_rate = get_series_type_id(SeriesType.heart_rate)
+        aggregates = AggregateRepository(EventRecordAggregate)
+        aggregates.upsert(
+            db,
+            [
+                {
+                    "record_id": workout.id,
+                    "series_type_definition_id": heart_rate,
+                    "computed_by": ComputedBy.PROVIDER,
+                    "min": Decimal("140"),
+                    "count": 1,
+                }
+            ],
+        )
+        # nap-1's refreshed bounds equal the workout's window exactly.
+        record = self._record(data_source, self._dt(22, 0), self._dt(7, 0, day=22)).model_copy(
+            update={"external_id": "nap-1"}
+        )
+
+        result = event_record_service.create_or_merge_sleep(
+            db, data_source.user_id, record, self._detail(record.id), self.THRESHOLD
+        )
+        db.commit()
+
+        assert result.id == sleep.id
+        db.expire_all()
+        assert result.start_datetime == self._dt(23, 0)
+        assert result.end_datetime == self._dt(6, 0, day=22)
+        # The workout and its session values are untouched.
+        assert db.get(EventRecord, workout.id) is not None
+        row = db.query(EventRecordAggregate).filter(EventRecordAggregate.record_id == workout.id).one()
+        assert row.min == Decimal("140")
+        assert db.query(EventRecordAggregate).filter(EventRecordAggregate.record_id == sleep.id).count() == 0
+
     def test_adjacent_outside_threshold_not_merged(self, db: Session) -> None:
         """Sessions further apart than threshold create two separate records."""
         user = UserFactory()
