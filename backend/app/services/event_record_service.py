@@ -498,13 +498,25 @@ class EventRecordService(
                 new_start = record.start_datetime if record.start_datetime is not None else adjacent.start_datetime
                 new_end = record.end_datetime if record.end_datetime is not None else adjacent.end_datetime
                 if (new_start, new_end) != (old_start, old_end):
-                    # The refreshed window is already held by a second record — the same
-                    # session stored once under another external_id. Absorb it before the
-                    # update collides with ix_event_record_source_time.
+                    # The refreshed window is already held by a second record. ix_event_record_source_time
+                    # spans every non-meal category, so the holder may be another sleep session — the same
+                    # night stored once under another external_id, absorbed below — or an unrelated event
+                    # like a workout, which must keep its row; in that case the stored window stands.
                     conflict = self.crud.get_by_window(db_session, adjacent.data_source_id, new_start, new_end)
                     if conflict is not None and conflict.id != adjacent.id:
-                        self.aggregate_repo.move_record(db_session, conflict.id, adjacent.id)
-                        self.crud.delete_flush(db_session, conflict)
+                        if conflict.category == EventCategory.SLEEP and conflict.type == "sleep_session":
+                            self.aggregate_repo.move_record(db_session, conflict.id, adjacent.id)
+                            self.crud.delete_flush(db_session, conflict)
+                        else:
+                            logger.warning(
+                                "Sleep refresh window held by another event; keeping stored bounds",
+                                provider=record.provider,
+                                user_id=str(user_id),
+                                record_id=str(adjacent.id),
+                                conflict_id=str(conflict.id),
+                                conflict_category=conflict.category,
+                            )
+                            record = record.model_copy(update={"start_datetime": old_start, "end_datetime": old_end})
                 for field in ("start_datetime", "end_datetime", "zone_offset"):
                     new_val = getattr(record, field, None)
                     if new_val is not None:
