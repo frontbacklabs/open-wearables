@@ -637,13 +637,28 @@ class ImportService:
             stored = self.event_record_service.bulk_create(db_session, workout_records)
             db_session.flush()
 
+            # Deliveries of one workout resolve to one stored record; only the last delivery's
+            # statistics belong to it — earlier ones are superseded revisions whose extremes
+            # must not survive the aggregate upsert.
+            last_delivery_by_stored: dict[UUID, UUID] = {}
+            for record, _, _ in workout_bundles:
+                if (stored_id := stored.get(record.id)) is not None:
+                    last_delivery_by_stored[stored_id] = record.id
+
             # A workout matched on external_id keeps its stored id; statistics and details point at it
             time_series_samples = []
-            for _, _, samples in workout_bundles:
+            for record, _, samples in workout_bundles:
+                stored_id = stored.get(record.id)
+                if stored_id is not None and last_delivery_by_stored.get(stored_id) != record.id:
+                    continue
                 for sample in samples:
                     if sample.session is not None:
-                        stored_id = stored.get(sample.session.record_id)
-                        session = sample.session.model_copy(update={"record_id": stored_id}) if stored_id else None
+                        sample_stored_id = stored.get(sample.session.record_id)
+                        session = (
+                            sample.session.model_copy(update={"record_id": sample_stored_id})
+                            if sample_stored_id
+                            else None
+                        )
                         sample = sample.model_copy(update={"session": session})
                     time_series_samples.append(sample)
 

@@ -5,6 +5,7 @@ Tests the full import flow for Apple HealthKit data via SDK.
 """
 
 import json
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -574,6 +575,44 @@ class TestAppleSDKImport:
         workout = db.query(EventRecord).filter(EventRecord.category == "workout").one()
         details = db.query(WorkoutDetails).filter(WorkoutDetails.record_id == workout.id).one()
         assert details.steps_count == 4500
+
+    def test_only_the_last_delivery_of_a_workout_keeps_its_statistics(
+        self,
+        db: Session,
+        import_service: ImportService,
+    ) -> None:
+        """A superseded delivery's statistics must not survive on the stored record's cadence aggregate."""
+        user = UserFactory()
+
+        def delivery(end: str, cadence: int) -> dict[str, Any]:
+            return {
+                "id": "ABAB0000-1111-2222-3333-444455556666",
+                "type": "cycling",
+                "startDate": "2025-01-29T12:00:00Z",
+                "endDate": end,
+                "source": {"name": "Apple Watch", "bundleIdentifier": "com.apple.health"},
+                "values": [{"type": "maxCadence", "unit": "spm", "value": cadence}],
+            }
+
+        payload = {
+            **SDK_ENVELOPE,
+            "data": {"workouts": [delivery("2025-01-29T12:40:00Z", 200), delivery("2025-01-29T12:45:00Z", 180)]},
+        }
+
+        result = import_service.load_data(db, payload, str(user.id))
+
+        assert result["workouts_saved"] == 1
+        workout = db.query(EventRecord).filter(EventRecord.category == "workout").one()
+        assert workout.end_datetime == datetime(2025, 1, 29, 12, 45, tzinfo=timezone.utc)
+        aggregate = (
+            db.query(EventRecordAggregate)
+            .filter(
+                EventRecordAggregate.record_id == workout.id,
+                EventRecordAggregate.series_type_definition_id == get_series_type_id(SeriesType.cadence),
+            )
+            .one()
+        )
+        assert aggregate.max == Decimal("180")
 
     def test_import_workout_with_fractional_steps(
         self,
