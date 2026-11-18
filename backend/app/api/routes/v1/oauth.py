@@ -23,6 +23,7 @@ from app.services.providers.factory import ProviderFactory
 from app.utils.auth import ConnectAuthDep
 from app.utils.exceptions import AppError, UnsupportedProviderError, unknown_provider
 from app.utils.redirect_allowlist import is_allowed_redirect, with_result
+from app.utils.structured_logging import get_logger
 
 router = APIRouter()
 factory = ProviderFactory()
@@ -33,6 +34,9 @@ def resolve_provider(slug: str) -> ProviderName:
         return ProviderName(from_url_slug(slug))
     except ValueError:
         raise unknown_provider(slug, ("path", "provider"), (p.value for p in ProviderName)) from None
+
+
+logger = get_logger(__name__)
 
 
 def _error_redirect(return_to: str | None, provider: ProviderName, message: str) -> RedirectResponse:
@@ -138,6 +142,15 @@ def oauth_callback(
     try:
         oauth_state = strategy.oauth.handle_callback(db, code, state)
     except AppError as exc:
+        # The redirect below bypasses the global handler; report here instead. A 4xx AppError is
+        # demoted to a warning by the logger, so only provider outages and configuration faults
+        # reach Sentry.
+        logger.error(
+            "OAuth callback failed",
+            provider=provider_name.value,
+            action="oauth_callback_error",
+            exc_info=exc,
+        )
         return _error_redirect(return_to, provider_name, exc.detail)
 
     # Stamp last_synced_at=now so the first periodic sync uses the connection
