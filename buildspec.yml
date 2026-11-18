@@ -740,8 +740,9 @@ phases:
         # has no per-request concurrency cap like Cloud Run's --concurrency: the
         # pool ceiling itself (DB_POOL_SIZE + DB_MAX_OVERFLOW) is the only bound
         # on how many concurrent requests one task will actually serve.
-        #   steady state (pool_size, what stays open): api 2x10 + worker 8 + beat 2 = 30
-        #   absolute peak (with max_overflow):        api 2x15 + worker 12 + beat 3 = 45
+        #   steady state (pool_size, what stays open): api 10 + worker 8 + beat 2 = 20
+        #   absolute peak (with max_overflow):        api 2x30 + worker 12 + beat 3 = 75
+        # The API's 2x is its rolling deploy (maximumPercent=200), not steady state.
         # ...leaving room for co-tenants on the same RDS instance and the rdsadmin
         # reserved connections. DB_ASYNC_* stay 0: no endpoint takes AsyncDbSession,
         # so that engine runs as a NullPool and reserves nothing.
@@ -919,7 +920,7 @@ phases:
             {"name":"CORS_ALLOW_ALL","value":$cors},
             {"name":"OAUTH_REDIRECT_ALLOWLIST","value":$oauth_redirect_allowlist},
             {"name":"DB_POOL_SIZE","value":"10"},
-            {"name":"DB_MAX_OVERFLOW","value":"5"},
+            {"name":"DB_MAX_OVERFLOW","value":"20"},
             {"name":"OUTGOING_WEBHOOKS_ENABLED","value":"true"}
           ]' <<<"$SHARED_ENVIRONMENT")"
         # app.sh runs seed scripts before uvicorn starts (migrations run in
