@@ -223,11 +223,25 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
         self,
         raw: list[SuuntoWorkoutJSON],
         user_id: str,
-    ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate]]:
-        """Build event record payloads for Suunto workouts."""
+    ) -> Iterable[tuple[EventRecordCreate, EventRecordDetailCreate, SuuntoWorkoutJSON]]:
+        """Build event record payloads for Suunto workouts, each with its raw workout."""
         for raw_workout in raw:
             record, details = self._normalize_workout(raw_workout, user_id)
-            yield record, details
+            yield record, details, raw_workout
+
+    def _save_bundle(
+        self,
+        db: DbSession,
+        record: EventRecordCreate,
+        detail: EventRecordDetailCreate,
+        raw_workout: SuuntoWorkoutJSON,
+    ) -> UUID:
+        """Save one workout, first stamping a pre-upgrade workoutId key onto the legacy row it revises."""
+        event_record_service.crud.adopt_legacy_external_id(db, record, str(raw_workout.workoutId))
+        created_record = event_record_service.create(db, record)
+        detail_for_record = detail.model_copy(update={"record_id": created_record.id})
+        event_record_service.create_detail(db, detail_for_record)
+        return created_record.id
 
     def load_data(
         self,
@@ -257,10 +271,8 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
                 )
 
         count = 0
-        for record, details in self._build_bundles(workouts, user_id):
-            created_record = event_record_service.create(db, record)
-            detail_for_record = details.model_copy(update={"record_id": created_record.id})
-            event_record_service.create_detail(db, detail_for_record)
+        for record, details, raw_workout in self._build_bundles(workouts, user_id):
+            self._save_bundle(db, record, details, raw_workout)
             count += 1
 
         return count
@@ -313,10 +325,7 @@ class SuuntoWorkouts(BaseWorkoutsTemplate):
                 source=self.provider_name,
             )
 
-        for record, detail in self._build_bundles([raw_workout], user_id):
-            created_record = event_record_service.create(db, record)
-            detail_for_record = detail.model_copy(update={"record_id": created_record.id})
-            event_record_service.create_detail(db, detail_for_record)
-            return created_record.id
+        for record, detail, raw_workout in self._build_bundles([raw_workout], user_id):
+            return self._save_bundle(db, record, detail, raw_workout)
 
         return None

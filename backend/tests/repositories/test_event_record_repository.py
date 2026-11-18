@@ -106,6 +106,168 @@ class TestEventRecordRepository:
         assert first.end_datetime == start + timedelta(milliseconds=3425900)
         assert db.query(EventRecord).filter(EventRecord.external_id == "6aa10da139e69418a2fa8db1").count() == 1
 
+    def test_legacy_suunto_workout_with_unchanged_interval_is_revised_in_place(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """A pre-upgrade Suunto row keyed by workoutId is stamped with the workoutKey, then refreshed."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3426,
+            start_datetime=start,
+            end_datetime=end,
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is True
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == legacy.id
+        db.refresh(legacy)
+        assert legacy.external_id == "6aa10da139e69418a2fa8db1"
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 1
+
+    def test_legacy_suunto_workout_with_revised_interval_is_revised_in_place(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """The legacy match uses the workout interval, so a corrected end still finds the pre-upgrade row."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3427,
+            start_datetime=start,
+            end_datetime=end + timedelta(seconds=1),
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is True
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == legacy.id
+        db.refresh(legacy)
+        assert legacy.external_id == "6aa10da139e69418a2fa8db1"
+        assert legacy.end_datetime == end + timedelta(seconds=1)
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 1
+
+    def test_legacy_suunto_stamp_is_skipped_when_canonical_key_exists(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """A differently keyed pair is left for the dedupe repair: the canonical row refreshes, the legacy key stays."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+        canonical = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                device_model="Suunto Race 2",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="6aa10da139e69418a2fa8db1",
+            ),
+        )
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            device_model="Suunto Race 2",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3426,
+            start_datetime=start,
+            end_datetime=end,
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is False
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == canonical.id
+        db.refresh(legacy)
+        assert legacy.external_id == "0"
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 2
+
     def test_create_auto_creates_mapping(self, db: Session, event_repo: EventRecordRepository) -> None:
         """Test that create automatically creates a mapping if it doesn't exist."""
         # Arrange

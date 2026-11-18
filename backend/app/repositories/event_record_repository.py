@@ -222,6 +222,67 @@ class EventRecordRepository(
                 found.setdefault(creator_id, record)
         return found
 
+    def adopt_legacy_external_id(
+        self, db_session: DbSession, creator: EventRecordCreate, legacy_external_id: str
+    ) -> bool:
+        """Stamp the canonical external_id onto the one legacy row a workout revises, if there is one.
+
+        Suunto stored workouts under the detail endpoint's numeric workoutId (always 0 there)
+        before workoutKey became the external_id. The legacy row is recognised by the creator's
+        user and provider plus an overlapping workout interval — never by the legacy id alone,
+        which every Suunto detail delivery shares. Returns True when the row was stamped, so the
+        following create() refreshes it in place instead of inserting a differently keyed copy.
+
+        When no legacy row overlaps, several do, or a row already holds the canonical key, nothing
+        is stamped: the canonical row refreshes as usual and the legacy copies stay untouched.
+        Differently keyed pairs are not expected at rollout — no canonical-keyed Suunto row exists
+        before this ships, so the first delivery after deploy stamps the legacy row before any
+        copy is inserted. Should a pair ever form, aligning the legacy row's external_id to the
+        canonical key lets scripts/data_migrations/dedupe_workouts_by_external_id.py repair it
+        with its keep-newest rule.
+        """
+        if (
+            creator.category != EventCategory.WORKOUT
+            or not creator.external_id
+            or not creator.user_id
+            or creator.start_datetime is None
+            or creator.end_datetime is None
+        ):
+            return False
+        key = self._workout_key(creator)
+        if key is None or legacy_external_id in (None, "", creator.external_id):
+            return False
+        user_id, provider, canonical_id = key
+        sources = select(DataSource.id).where(DataSource.user_id == user_id, DataSource.provider == provider)
+        legacy_rows = (
+            db_session.query(self.model)
+            .filter(
+                self.model.data_source_id.in_(sources.scalar_subquery()),
+                self.model.category == EventCategory.WORKOUT,
+                self.model.external_id == legacy_external_id,
+                self.model.start_datetime < creator.end_datetime,
+                self.model.end_datetime > creator.start_datetime,
+            )
+            .all()
+        )
+        if len(legacy_rows) != 1:
+            return False
+        canonical_exists = (
+            db_session.query(self.model.id)
+            .filter(
+                self.model.data_source_id.in_(sources.scalar_subquery()),
+                self.model.category == EventCategory.WORKOUT,
+                self.model.external_id == canonical_id,
+            )
+            .first()
+            is not None
+        )
+        if canonical_exists:
+            return False
+        legacy_rows[0].external_id = canonical_id
+        db_session.flush()
+        return True
+
     def _refresh_from(self, db_session: DbSession, record: EventRecord, creator: EventRecordCreate) -> EventRecord:
         """Update a stored workout to the newest delivery's times, type and source name.
 
