@@ -122,8 +122,8 @@ class TestEventRecordDetailRepository:
         with pytest.raises(ValueError, match="Unknown detail type: invalid"):
             detail_repo.create(db, detail_data, detail_type="invalid")
 
-    def test_create_duplicate_returns_existing(self, db: Session) -> None:
-        """Re-syncing the same record_id updates the existing detail instead of raising.
+    def test_create_duplicate_refreshes_existing(self, db: Session) -> None:
+        """Re-syncing the same record_id refreshes the existing detail instead of raising (#1608).
 
         Regression for #1375: production wires the repo with the abstract
         ``EventRecordDetail`` base, so the old ``@handle_duplicates`` recovery blew up
@@ -145,7 +145,7 @@ class TestEventRecordDetailRepository:
             detail_type="workout",
         )
 
-        # Assert - the stored row is returned, refreshed with the re-synced value
+        # Assert - the same row, carrying the re-synced value
         assert isinstance(duplicate, WorkoutDetails)
         assert duplicate.record_id == first.record_id
         assert duplicate.steps_count == 9999

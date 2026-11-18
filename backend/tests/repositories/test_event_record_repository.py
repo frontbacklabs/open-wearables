@@ -68,6 +68,285 @@ class TestEventRecordRepository:
         assert db_event is not None
         assert db_event.data_source_id == mapping.id
 
+    def test_create_matches_workout_on_external_id(self, db: Session, event_repo: EventRecordRepository) -> None:
+        """A workout re-delivered with a slightly different end and a new device is matched by external_id (#1607)."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, 550000, tzinfo=timezone.utc)
+
+        def workout(end_ms: int, device_model: str | None) -> EventRecordCreate:
+            return EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                device_model=device_model,
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=start + timedelta(milliseconds=end_ms),
+                external_id="6aa10da139e69418a2fa8db1",
+            )
+
+        first = event_repo.create(db, workout(3426173, None))
+        second = event_repo.create(db, workout(3426080, "Suunto Race 2"))
+
+        assert second.id == first.id
+        assert second.end_datetime == start + timedelta(milliseconds=3426080)
+        assert db.query(EventRecord).filter(EventRecord.external_id == "6aa10da139e69418a2fa8db1").count() == 1
+
+        # Bulk: two more deliveries in one batch resolve to the same row, the last one's times winning
+        earlier, latest = workout(3426000, None), workout(3425900, None)
+        stored = event_repo.bulk_create(db, [earlier, latest])
+        db.commit()
+
+        assert stored == {earlier.id: first.id, latest.id: first.id}
+        db.refresh(first)
+        assert first.end_datetime == start + timedelta(milliseconds=3425900)
+        assert db.query(EventRecord).filter(EventRecord.external_id == "6aa10da139e69418a2fa8db1").count() == 1
+
+    def test_legacy_suunto_workout_with_unchanged_interval_is_revised_in_place(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """A pre-upgrade Suunto row keyed by workoutId is stamped with the workoutKey, then refreshed."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3426,
+            start_datetime=start,
+            end_datetime=end,
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is True
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == legacy.id
+        db.refresh(legacy)
+        assert legacy.external_id == "6aa10da139e69418a2fa8db1"
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 1
+
+    def test_legacy_suunto_workout_with_revised_interval_is_revised_in_place(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """The legacy match uses the workout interval, so a corrected end still finds the pre-upgrade row."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3427,
+            start_datetime=start,
+            end_datetime=end + timedelta(seconds=1),
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is True
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == legacy.id
+        db.refresh(legacy)
+        assert legacy.external_id == "6aa10da139e69418a2fa8db1"
+        assert legacy.end_datetime == end + timedelta(seconds=1)
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 1
+
+    def test_legacy_suunto_stamp_requires_near_coincident_intervals(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """A distinct workout that merely overlaps a legacy row must not overwrite it."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+
+        def workout(start_offset: timedelta, end_offset: timedelta, external_id: str) -> EventRecordCreate:
+            return EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=int((end_offset - start_offset).total_seconds()),
+                start_datetime=start + start_offset,
+                end_datetime=start + end_offset,
+                external_id=external_id,
+            )
+
+        legacy = event_repo.create(db, workout(timedelta(0), timedelta(minutes=30), "0"))
+        other = workout(timedelta(minutes=15), timedelta(minutes=45), "6bb20da139e69418a2fa8db1")
+
+        assert event_repo.adopt_legacy_external_id(db, other, "0") is False
+        stored = event_repo.create(db, other)
+        db.commit()
+
+        assert stored.id != legacy.id
+        db.refresh(legacy)
+        assert legacy.external_id == "0"
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 2
+
+    def test_legacy_suunto_stamp_accepts_naive_delivery_datetimes(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """Suunto deliveries carry naive datetimes; the stamp must not mix them with stored aware ones."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3426,
+            start_datetime=start.replace(tzinfo=None),
+            end_datetime=end.replace(tzinfo=None),
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is True
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == legacy.id
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 1
+
+    def test_legacy_suunto_stamp_is_skipped_when_canonical_key_exists(
+        self, db: Session, event_repo: EventRecordRepository
+    ) -> None:
+        """A differently keyed pair is left for the dedupe repair: the canonical row refreshes, the legacy key stays."""
+        user = UserFactory()
+        start = datetime(2026, 9, 9, 6, 42, 14, tzinfo=timezone.utc)
+        end = start + timedelta(seconds=3426)
+
+        legacy = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="0",
+            ),
+        )
+        canonical = event_repo.create(
+            db,
+            EventRecordCreate(
+                id=uuid4(),
+                user_id=user.id,
+                source="suunto",
+                provider="suunto",
+                device_model="Suunto Race 2",
+                category="workout",
+                type="running",
+                source_name="Suunto",
+                duration_seconds=3426,
+                start_datetime=start,
+                end_datetime=end,
+                external_id="6aa10da139e69418a2fa8db1",
+            ),
+        )
+        redelivery = EventRecordCreate(
+            id=uuid4(),
+            user_id=user.id,
+            source="suunto",
+            provider="suunto",
+            device_model="Suunto Race 2",
+            category="workout",
+            type="running",
+            source_name="Suunto",
+            duration_seconds=3426,
+            start_datetime=start,
+            end_datetime=end,
+            external_id="6aa10da139e69418a2fa8db1",
+        )
+
+        assert event_repo.adopt_legacy_external_id(db, redelivery, "0") is False
+        stored = event_repo.create(db, redelivery)
+        db.commit()
+
+        assert stored.id == canonical.id
+        db.refresh(legacy)
+        assert legacy.external_id == "0"
+        assert db.query(EventRecord).filter(EventRecord.category == "workout").count() == 2
+
     def test_create_auto_creates_mapping(self, db: Session, event_repo: EventRecordRepository) -> None:
         """Test that create automatically creates a mapping if it doesn't exist."""
         # Arrange
