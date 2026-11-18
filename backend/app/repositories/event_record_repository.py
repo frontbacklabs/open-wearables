@@ -223,11 +223,11 @@ class EventRecordRepository(
         return found
 
     def _refresh_from(self, db_session: DbSession, record: EventRecord, creator: EventRecordCreate) -> EventRecord:
-        """Update a stored workout to the newest delivery's times and type.
+        """Update a stored workout to the newest delivery's times, type and source name.
 
         If another copy already holds those times, that copy is returned instead.
         """
-        fields = ("type", "duration_seconds", "start_datetime", "end_datetime", "zone_offset")
+        fields = ("type", "source_name", "duration_seconds", "start_datetime", "end_datetime", "zone_offset")
         updates = {field: value for field in fields if (value := getattr(creator, field)) is not None}
         if all(getattr(record, field) == value for field, value in updates.items()):
             return record
@@ -249,7 +249,14 @@ class EventRecordRepository(
                 self.model.external_id == record.external_id,
             )
             return holder.one_or_none() or record
-        self._record_coverage(db_session, [(creator, self.data_source_repo.provider_of(creator))])
+        provider = self.data_source_repo.provider_of(creator)
+        if "start_datetime" in updates or "end_datetime" in updates:
+            # Coverage only widens on write; a trimmed window must be recomputed from the
+            # records left or it keeps claiming days the revision removed.
+            data_type_coverage_repository.refresh_events(
+                db_session, [(creator.user_id, provider.value, creator.category.value)]
+            )
+        self._record_coverage(db_session, [(creator, provider)])
         mark_dirty_days(
             db_session,
             [
