@@ -269,10 +269,19 @@ class EventRecordRepository(
         # Overlap alone cannot prove two workouts are the same activity: a distinct workout can
         # overlap one legacy row. Require the intervals to nearly coincide — a revision moves the
         # bounds by seconds, an unrelated workout does not.
+        def _utc(dt: datetime) -> datetime:
+            # Providers may deliver naive datetimes; storage treats them as UTC.
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+        creator_start = _utc(creator.start_datetime)
+        creator_end = _utc(creator.end_datetime)
+
         def coincidence(row: EventRecord) -> float:
-            overlap = min(row.end_datetime, creator.end_datetime) - max(row.start_datetime, creator.start_datetime)
-            span = max(row.end_datetime - row.start_datetime, creator.end_datetime - creator.start_datetime)
-            return overlap.total_seconds() / span.total_seconds() if span.total_seconds() > 0 else 0.0
+            start = max(_utc(row.start_datetime), creator_start)
+            end = min(_utc(row.end_datetime), creator_end)
+            span = max(_utc(row.end_datetime) - _utc(row.start_datetime), creator_end - creator_start)
+            overlap = (end - start).total_seconds()
+            return overlap / span.total_seconds() if span.total_seconds() > 0 and overlap > 0 else 0.0
 
         legacy_rows = [row for row in overlapping if coincidence(row) >= 0.9]
         if len(legacy_rows) != 1:
