@@ -7,19 +7,31 @@ Tests the /api/v1/oauth endpoints including:
 - PUT /api/v1/oauth/providers/{provider} - test update provider status
 """
 
+from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
+import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
 from sqlalchemy.orm import Session
 
-from tests.factories import DeveloperFactory, fake_firebase_uid
-from tests.utils import developer_auth_headers
+from app.config import settings
+from app.services.sdk_token_service import create_sdk_user_token
+from app.utils.connect_token import create_connect_token
+from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory, fake_firebase_uid
+from tests.utils import api_key_headers, developer_auth_headers
+
+
+@pytest.fixture
+def auth_headers(db: Session) -> dict[str, str]:
+    return api_key_headers(ApiKeyFactory().plain_key)
 
 
 class TestOAuthAuthorizeEndpoint:
     """Test suite for OAuth authorization endpoint."""
 
-    def test_authorize_provider_success(self, client: TestClient, db: Session) -> None:
+    def test_authorize_provider_success(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test successfully initiating OAuth flow for a provider."""
         # Arrange
         user_id = fake_firebase_uid()
@@ -28,6 +40,7 @@ class TestOAuthAuthorizeEndpoint:
         response = client.get(
             "/api/v1/oauth/garmin/authorize",
             params={"user_id": str(user_id)},
+            headers=auth_headers,
         )
 
         # Assert
@@ -39,11 +52,11 @@ class TestOAuthAuthorizeEndpoint:
         assert isinstance(data["state"], str)
         assert len(data["state"]) > 0
 
-    def test_authorize_provider_with_redirect_uri(self, client: TestClient, db: Session) -> None:
+    def test_authorize_provider_with_redirect_uri(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test OAuth flow with optional redirect URI."""
         # Arrange
         user_id = fake_firebase_uid()
-        redirect_uri = "https://myapp.com/oauth/callback"
+        redirect_uri = "openwearables://oauth/callback"
 
         # Act
         response = client.get(
@@ -52,6 +65,7 @@ class TestOAuthAuthorizeEndpoint:
                 "user_id": str(user_id),
                 "redirect_uri": redirect_uri,
             },
+            headers=auth_headers,
         )
 
         # Assert
@@ -60,7 +74,7 @@ class TestOAuthAuthorizeEndpoint:
         assert "authorization_url" in data
         assert "state" in data
 
-    def test_authorize_different_providers(self, client: TestClient, db: Session) -> None:
+    def test_authorize_different_providers(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test initiating OAuth for different providers."""
         # Arrange
         user_id = fake_firebase_uid()
@@ -71,6 +85,7 @@ class TestOAuthAuthorizeEndpoint:
             response = client.get(
                 f"/api/v1/oauth/{provider}/authorize",
                 params={"user_id": str(user_id)},
+                headers=auth_headers,
             )
 
             # Assert
@@ -79,15 +94,15 @@ class TestOAuthAuthorizeEndpoint:
             assert "authorization_url" in data
             assert "state" in data
 
-    def test_authorize_missing_user_id(self, client: TestClient, db: Session) -> None:
+    def test_authorize_missing_user_id(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test authorization without user_id parameter."""
         # Act
-        response = client.get("/api/v1/oauth/garmin/authorize")
+        response = client.get("/api/v1/oauth/garmin/authorize", headers=auth_headers)
 
         # Assert
         assert response.status_code == 422
 
-    def test_authorize_invalid_provider(self, client: TestClient, db: Session) -> None:
+    def test_authorize_invalid_provider(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test authorization with non-existent provider."""
         # Arrange
         user_id = fake_firebase_uid()
@@ -96,12 +111,13 @@ class TestOAuthAuthorizeEndpoint:
         response = client.get(
             "/api/v1/oauth/invalid-provider/authorize",
             params={"user_id": str(user_id)},
+            headers=auth_headers,
         )
 
         # Assert
         assert response.status_code == 422
 
-    def test_authorize_non_oauth_provider(self, client: TestClient, db: Session) -> None:
+    def test_authorize_non_oauth_provider(self, client: TestClient, auth_headers: dict[str, str]) -> None:
         """Test authorization with provider that doesn't support OAuth."""
         # Arrange
         user_id = fake_firebase_uid()
@@ -110,11 +126,102 @@ class TestOAuthAuthorizeEndpoint:
         response = client.get(
             "/api/v1/oauth/apple/authorize",
             params={"user_id": str(user_id)},
+            headers=auth_headers,
         )
 
         # Assert - Should fail because apple doesn't have OAuth
         assert response.status_code == 400
         assert response.json()["code"] == "UNSUPPORTED_PROVIDER"
+
+    def test_authorize_requires_credentials(self, client: TestClient, db: Session) -> None:
+        response = client.get("/api/v1/oauth/garmin/authorize", params={"user_id": fake_firebase_uid()})
+        assert response.status_code == 401
+
+    def test_authorize_with_developer_token(self, client: TestClient, db: Session) -> None:
+        response = client.get(
+            "/api/v1/oauth/garmin/authorize",
+            params={"user_id": fake_firebase_uid()},
+            headers=developer_auth_headers(DeveloperFactory().id),
+        )
+        assert response.status_code == 200
+
+    @pytest.mark.parametrize(
+        "make_headers",
+        [
+            lambda uid: {"X-Open-Wearables-Connect-Token": create_connect_token(uid)[0]},
+            lambda uid: {"Authorization": f"Bearer {create_sdk_user_token('app_1', str(uid))}"},
+        ],
+        ids=["connect_token", "sdk_token"],
+    )
+    def test_user_scoped_token_only_connects_its_own_user(
+        self, client: TestClient, db: Session, make_headers: Callable[[str], dict[str, str]]
+    ) -> None:
+        user_id = fake_firebase_uid()
+        headers = make_headers(user_id)
+
+        own = client.get("/api/v1/oauth/garmin/authorize", params={"user_id": str(user_id)}, headers=headers)
+        other = client.get("/api/v1/oauth/garmin/authorize", params={"user_id": fake_firebase_uid()}, headers=headers)
+
+        assert own.status_code == 200
+        assert other.status_code == 403
+
+    def test_invalid_connect_token_is_rejected(self, client: TestClient, db: Session) -> None:
+        response = client.get(
+            "/api/v1/oauth/garmin/authorize",
+            params={"user_id": fake_firebase_uid()},
+            headers={"X-Open-Wearables-Connect-Token": "not-a-token"},
+        )
+        assert response.status_code == 401
+
+    def test_sdk_token_is_not_a_connect_token(self, client: TestClient, db: Session) -> None:
+        user_id = fake_firebase_uid()
+        response = client.get(
+            "/api/v1/oauth/garmin/authorize",
+            params={"user_id": str(user_id)},
+            headers={"X-Open-Wearables-Connect-Token": create_sdk_user_token("app_1", str(user_id))},
+        )
+        assert response.status_code == 401
+
+    def test_connect_token_signed_with_secret_key_is_rejected(self, client: TestClient, db: Session) -> None:
+        user_id = fake_firebase_uid()
+        claims = {"sub": str(user_id), "scope": "connect", "exp": datetime.now(timezone.utc) + timedelta(days=1)}
+        response = client.get(
+            "/api/v1/oauth/garmin/authorize",
+            params={"user_id": str(user_id)},
+            headers={"X-Open-Wearables-Connect-Token": jwt.encode(claims, settings.secret_key, settings.algorithm)},
+        )
+        assert response.status_code == 401
+
+
+class TestConnectTokenEndpoint:
+    def test_requires_credentials(self, client: TestClient, db: Session) -> None:
+        user = UserFactory()
+        assert client.post(f"/api/v1/users/{user.id}/connect-token").status_code == 401
+
+    def test_unknown_user_is_404(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        response = client.post(f"/api/v1/users/{fake_firebase_uid()}/connect-token", headers=auth_headers)
+        assert response.status_code == 404
+
+    def test_minted_token_authorizes_its_user(self, client: TestClient, auth_headers: dict[str, str]) -> None:
+        user = UserFactory()
+
+        minted = client.post(f"/api/v1/users/{user.id}/connect-token", headers=auth_headers)
+
+        assert minted.status_code == 200
+        body = minted.json()
+        assert body["pair_url"].endswith(f"/users/{user.id}/pair?t={body['token']}")
+        response = client.get(
+            "/api/v1/oauth/garmin/authorize",
+            params={"user_id": str(user.id)},
+            headers={"X-Open-Wearables-Connect-Token": body["token"]},
+        )
+        assert response.status_code == 200
+
+    def test_connect_token_is_not_an_api_credential(self, client: TestClient, db: Session) -> None:
+        user = UserFactory()
+        token, _ = create_connect_token(user.id)
+        response = client.get(f"/api/v1/users/{user.id}", headers={"Authorization": f"Bearer {token}"})
+        assert response.status_code == 401
 
 
 class TestOAuthProvidersEndpoint:
