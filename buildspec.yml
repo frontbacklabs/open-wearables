@@ -225,6 +225,8 @@ env:
     # Dashboard origin for invite links; the dashboard is tunnel-only.
     FRONTEND_URL: "http://localhost:3000"
     CORS_ALLOW_ALL: "true"
+    # OAuth redirect allowlist: the default app callback plus Ren's mobile deep links.
+    OAUTH_REDIRECT_ALLOWLIST: "openwearables://oauth/callback,ren://integrations/callback,ren-dev://integrations/callback,ren-staging://integrations/callback"
     API_NAME: "Ren - Open Wearables API"
 
     # Secrets Manager references. DB credentials come from the ow_app runtime
@@ -911,9 +913,11 @@ phases:
         BACKEND_ENVIRONMENT="$(jq -c \
           --arg port "$BACKEND_CONTAINER_PORT" \
           --arg cors "$CORS_ALLOW_ALL" \
+          --arg oauth_redirect_allowlist "$OAUTH_REDIRECT_ALLOWLIST" \
           '. + [
             {"name":"API_PORT","value":$port},
             {"name":"CORS_ALLOW_ALL","value":$cors},
+            {"name":"OAUTH_REDIRECT_ALLOWLIST","value":$oauth_redirect_allowlist},
             {"name":"DB_POOL_SIZE","value":"10"},
             {"name":"DB_MAX_OVERFLOW","value":"5"},
             {"name":"OUTGOING_WEBHOOKS_ENABLED","value":"true"}
