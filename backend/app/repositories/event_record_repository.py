@@ -229,7 +229,7 @@ class EventRecordRepository(
 
         Suunto stored workouts under the detail endpoint's numeric workoutId (always 0 there)
         before workoutKey became the external_id. The legacy row is recognised by the creator's
-        user and provider plus an overlapping workout interval — never by the legacy id alone,
+        user and provider plus a near-coincident workout interval — never by the legacy id alone,
         which every Suunto detail delivery shares. Returns True when the row was stamped, so the
         following create() refreshes it in place instead of inserting a differently keyed copy.
 
@@ -254,7 +254,7 @@ class EventRecordRepository(
             return False
         user_id, provider, canonical_id = key
         sources = select(DataSource.id).where(DataSource.user_id == user_id, DataSource.provider == provider)
-        legacy_rows = (
+        overlapping = (
             db_session.query(self.model)
             .filter(
                 self.model.data_source_id.in_(sources.scalar_subquery()),
@@ -265,6 +265,16 @@ class EventRecordRepository(
             )
             .all()
         )
+
+        # Overlap alone cannot prove two workouts are the same activity: a distinct workout can
+        # overlap one legacy row. Require the intervals to nearly coincide — a revision moves the
+        # bounds by seconds, an unrelated workout does not.
+        def coincidence(row: EventRecord) -> float:
+            overlap = min(row.end_datetime, creator.end_datetime) - max(row.start_datetime, creator.start_datetime)
+            span = max(row.end_datetime - row.start_datetime, creator.end_datetime - creator.start_datetime)
+            return overlap.total_seconds() / span.total_seconds() if span.total_seconds() > 0 else 0.0
+
+        legacy_rows = [row for row in overlapping if coincidence(row) >= 0.9]
         if len(legacy_rows) != 1:
             return False
         canonical_exists = (
