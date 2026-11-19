@@ -339,15 +339,16 @@ fork divergence.
     breaks every Ren ingest refresh (401s on a route the dashboard still calls
     fine). Candidate for upstreaming; until then keep `ApiKeyDep` on the GET
     through merges.
-19. **CI `gate` job and ungated PR trigger.** `.github/workflows/ci.yml` ends in a
-    `gate` job that `needs` every check job and fails unless each result is
-    `success` or `skipped`; `gate` is a required status check on `main`. The
-    `pull_request` trigger deliberately has **no** `paths` filter (unlike
-    `push`) so `gate` reports on every PR — GitHub blocks merges on required
-    checks that never run, which a path-filtered workflow produces for
-    docs-only or workflow-only changes. Taking upstream's ci.yml wholesale
-    drops both pieces; the required check then waits forever and no PR can
-    merge. Candidate for upstreaming.
+19. **CI `gate` job and ungated PR trigger.** `.github/workflows/ci.yml` is the
+    fork's own test-only workflow (upstream's ci.yml is deleted — see rule 21):
+    `backend-test`, `mcp-test`, `frontend-test`, and a closing `gate` job that
+    `needs` all three and fails unless each result is `success` or `skipped`;
+    `gate` is a required status check on `main`. The `pull_request` trigger
+    deliberately has **no** `paths` filter so `gate` reports on every PR —
+    GitHub blocks merges on required checks that never run, which a
+    path-filtered workflow produces for docs-only or workflow-only changes.
+    Taking upstream's ci.yml wholesale drops both pieces; the required check
+    then waits forever and no PR can merge. Candidate for upstreaming.
 20. **No `pr-validation.yml` workflow.** `.github/workflows/pr-validation.yml`
     (semantic PR-title lint via `amannn/action-semantic-pull-request`) is
     deleted on the fork: Ren wants PR checks limited to Devin Review + CI
@@ -355,3 +356,12 @@ fork divergence.
     upstream sync can restore it — keep it deleted on merge rather than
     re-adopting the lint. CodeQL default setup is likewise disabled in repo
     settings (Settings → Code security) so it cannot add non-test checks.
+21. **Upstream CI automation stays deleted.** `.github/workflows/publish-images.yml`
+    (Docker Hub publishing aimed at upstream's org), `.github/dependabot.yml`,
+    and `.github/actions/nightly-guard/` are deleted on the fork: Ren wants PR
+    checks limited to Devin Review + CI tests, and none of these produce test
+    signal — publish-images targeted upstream's Docker Hub org and its nightly
+    cron never ran on the fork anyway. Upstream still ships all three, so an
+    upstream sync can restore them — keep them deleted on merge rather than
+    re-adopting them. The only workflows that survive on the fork are the
+    test-only `ci.yml` (rule 19) and the fork-added `paperclip-merge-hook.yml`.
