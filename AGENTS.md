@@ -339,3 +339,12 @@ fork divergence.
     breaks every Ren ingest refresh (401s on a route the dashboard still calls
     fine). Candidate for upstreaming; until then keep `ApiKeyDep` on the GET
     through merges.
+19. **CI `gate` job and ungated PR trigger.** `.github/workflows/ci.yml` ends in a
+    `gate` job that `needs` every check job and fails unless each result is
+    `success` or `skipped`; `gate` is a required status check on `main`. The
+    `pull_request` trigger deliberately has **no** `paths` filter (unlike
+    `push`) so `gate` reports on every PR — GitHub blocks merges on required
+    checks that never run, which a path-filtered workflow produces for
+    docs-only or workflow-only changes. Taking upstream's ci.yml wholesale
+    drops both pieces; the required check then waits forever and no PR can
+    merge. Candidate for upstreaming.
