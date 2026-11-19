@@ -177,9 +177,10 @@ fork divergence.
    app code and tests (`str(uuid4())` / `fake_firebase_uid()`). The same applies inside
    raw SQL: `data_type_coverage_repository` binds user ids as `text[]` and types its
    key aliases `str`, where upstream's `uuid[]` casts assume UUID-typed ids and break
-   on Firebase UIDs. Several upstream tests
-   assume UUID ids and are expected to fail on the fork rather than be "fixed" by
-   widening the model.
+   on Firebase UIDs. Several upstream tests assume UUID ids; align them to the fork
+   contract (`str(uuid4())` / `fake_firebase_uid()`) rather than widening the model —
+   #44 rewrote the polar/strava/import/multipart/user cases this way. Tests that
+   cannot be aligned stay expected-fail.
 2. **ECR base images.** `backend/Dockerfile` (and worker/beat) use
    `public.ecr.aws/docker/library/python`, not upstream's Docker Hub base.
    `frontend/Dockerfile` uses ECR `node:22-alpine` + `npm i -g bun@1.4`. Take upstream's
@@ -196,7 +197,9 @@ fork divergence.
 4. **API-key auth and Svix.** `api_key_service.py` stays synchronous `def`
    (`_authenticate`, `_require_api_key`, `_require_api_key_detached`) — no `await`
    call sites. Outgoing webhooks stay disabled by default; the self-hosted Svix
-   server wiring and the `ENV: test` CI block stay intact.
+   server wiring and the `ENV: test` CI block stay intact. Upstream tests `await`
+   these helpers; drop the `await` in tests rather than making the helpers async
+   (#44).
 5. **Ren branding.** Ren logotype (`frontend/src/lib/assets/logotype.svg` driving
    `Wordmark.svelte`), nav **Overview** (not Dashboard), titles `Ren — Open Wearables
    Platform` / `· Ren`, fork login copy, and fork favicons win over upstream branding.
@@ -365,3 +368,10 @@ fork divergence.
     upstream sync can restore them — keep them deleted on merge rather than
     re-adopting them. The only workflows that survive on the fork are the
     test-only `ci.yml` (rule 19) and the fork-added `paperclip-merge-hook.yml`.
+22. **`PersonalRecordResponse` has no `id`.** Upstream #1807 dropped the field
+    when it rewrote the personal-record endpoints — `GET` returns an unsaved
+    fallback record that has no id, so a required `id` 500s the no-record path.
+    Our copy survived the 2026-11-01 sync only as a merge-resolution artifact,
+    and #44 removed it; the response contract is upstream's shape. Do not
+    re-add `id` (or a deprecated nullable copy) in a sync or review — if upstream
+    reintroduces the field, take upstream's version and delete this rule.
