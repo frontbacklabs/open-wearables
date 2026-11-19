@@ -348,3 +348,10 @@ fork divergence.
     docs-only or workflow-only changes. Taking upstream's ci.yml wholesale
     drops both pieces; the required check then waits forever and no PR can
     merge. Candidate for upstreaming.
+20. **No `pr-validation.yml` workflow.** `.github/workflows/pr-validation.yml`
+    (semantic PR-title lint via `amannn/action-semantic-pull-request`) is
+    deleted on the fork: Ren wants PR checks limited to Devin Review + CI
+    tests, and a title lint is not a test. Upstream still ships the file, so an
+    upstream sync can restore it — keep it deleted on merge rather than
+    re-adopting the lint. CodeQL default setup is likewise disabled in repo
+    settings (Settings → Code security) so it cannot add non-test checks.
