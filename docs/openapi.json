@@ -18522,11 +18522,6 @@
             "title": "Gender",
             "description": "Optional self-reported gender"
           },
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "title": "Id"
-          },
           "user_id": {
             "type": "string",
             "title": "User Id"
@@ -18550,7 +18545,6 @@
         },
         "type": "object",
         "required": [
-          "id",
           "user_id"
         ],
         "title": "PersonalRecordResponse"

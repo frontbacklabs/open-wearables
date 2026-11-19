@@ -202,7 +202,7 @@ class TestCreateUser:
         # Act
         response = client.post(
             f"{api_v1_prefix}/users",
-            json={"external_user_id": "ext123", "first_name": "Bob"},
+            json={"id": fake_firebase_uid(), "external_user_id": "ext123", "first_name": "Bob"},
             headers=developer_auth_headers(developer.id),
         )
 
@@ -223,7 +223,7 @@ class TestCreateUser:
         with patch("app.services.user_service.user_service.crud.get_by_external_user_id", return_value=None):
             response = client.post(
                 f"{api_v1_prefix}/users",
-                json={"external_user_id": "ext123"},
+                json={"id": fake_firebase_uid(), "external_user_id": "ext123"},
                 headers=developer_auth_headers(developer.id),
             )
 
@@ -294,8 +294,8 @@ class TestCreateUser:
         # Act
         response = client.post(f"{api_v1_prefix}/users", json={"email": "noid@example.com"}, headers=headers)
 
-        # Assert - this app maps RequestValidationError to 400
-        assert response.status_code == 400
+        # Assert - request validation is a 422 Problem Details
+        assert response.status_code == 422
 
     def test_create_user_duplicate_id_is_rejected(self, client: TestClient, db: Session, api_v1_prefix: str) -> None:
         """A repeated id is a conflict: the mirror is one-to-one."""

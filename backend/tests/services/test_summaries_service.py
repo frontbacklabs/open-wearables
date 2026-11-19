@@ -493,13 +493,13 @@ class TestGetSleepSummaries:
         )
         google = DataSourceFactory(
             user=user,
-            provider=ProviderName.GOOGLE,
+            provider=ProviderName.GOOGLE_HEALTH,
             source="google_health",
             device_model="Pixel Watch",
             device_type="watch",
         )
         priority_service.update_provider_priority(db, ProviderName.OURA, 1)
-        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 2)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE_HEALTH, 2)
         first_date = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
         for day_offset in range(120):
@@ -557,13 +557,13 @@ class TestGetSleepSummaries:
         )
         google = DataSourceFactory(
             user=user,
-            provider=ProviderName.GOOGLE,
+            provider=ProviderName.GOOGLE_HEALTH,
             source="google_health",
             device_model="Pixel Watch",
             device_type="watch",
         )
         priority_service.update_provider_priority(db, ProviderName.OURA, 1)
-        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 2)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE_HEALTH, 2)
         self._make_sleep_for_date(oura, date(2025, 1, 1))
         self._make_sleep_for_date(google, date(2025, 1, 1))
         self._make_sleep_for_date(google, date(2025, 1, 2))
@@ -578,7 +578,7 @@ class TestGetSleepSummaries:
         )
 
         assert [summary.date for summary in result.data] == [date(2025, 1, 1), date(2025, 1, 2)]
-        assert [summary.source.provider for summary in result.data] == [ProviderName.OURA, ProviderName.GOOGLE]
+        assert [summary.source.provider for summary in result.data] == [ProviderName.OURA, ProviderName.GOOGLE_HEALTH]
 
     def test_device_type_priority_precedes_device_model(self, db: Session, service: SummariesService) -> None:
         user = UserFactory()
@@ -587,21 +587,21 @@ class TestGetSleepSummaries:
             provider=ProviderName.OURA,
             source="oura_watch",
             device_model="A Watch",
-            device_type="ring",
+            device_type="watch",
         )
         later_ring = DataSourceFactory(
             user=user,
             provider=ProviderName.OURA,
             source="oura_ring_z",
             device_model="Z Ring",
-            device_type="watch",
+            device_type="ring",
         )
         earlier_ring = DataSourceFactory(
             user=user,
             provider=ProviderName.OURA,
             source="oura_ring_y",
             device_model="Y Ring",
-            device_type="watch",
+            device_type="ring",
         )
         priority_service.update_provider_priority(db, ProviderName.OURA, 1)
         priority_service.update_device_type_priority(db, DeviceType.RING, 1)
@@ -634,13 +634,13 @@ class TestGetSleepSummaries:
         )
         google = DataSourceFactory(
             user=user,
-            provider=ProviderName.GOOGLE,
+            provider=ProviderName.GOOGLE_HEALTH,
             source="google_health",
             device_model="Shared Ring",
             device_type="ring",
         )
         priority_service.update_provider_priority(db, ProviderName.OURA, 1)
-        priority_service.update_provider_priority(db, ProviderName.GOOGLE, 1)
+        priority_service.update_provider_priority(db, ProviderName.GOOGLE_HEALTH, 1)
         priority_service.update_device_type_priority(db, DeviceType.RING, 1)
         expected_dates = [date(2025, 1, day) for day in range(1, 6)]
         for index, sleep_date in enumerate(expected_dates):

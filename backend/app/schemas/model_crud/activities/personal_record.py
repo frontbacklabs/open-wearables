@@ -46,7 +46,6 @@ class PersonalRecordUpdate(PersonalRecordBase):
 class PersonalRecordResponse(PersonalRecordBase):
     model_config = ConfigDict(from_attributes=True)
 
-    id: UUID
     user_id: str
     sex: Sex | None = Field(None, description=_SEX_DESCRIPTION)
 

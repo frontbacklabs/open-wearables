@@ -113,4 +113,4 @@ class TestTimeSeriesEndpoint:
             params={**self.BASE_PARAMS, "sort_order": "newest"},
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422

@@ -266,7 +266,7 @@ class TestRequireApiKeyDetached:
 
         with patch("app.services.api_key_service.SessionLocal") as mock_session_local:
             mock_session_local.return_value.__enter__.return_value = db
-            result = await _require_api_key_detached(token=create_access_token(subject=str(developer.id)))
+            result = _require_api_key_detached(token=create_access_token(subject=str(developer.id)))
 
         assert result == str(developer.id)
 
@@ -276,7 +276,7 @@ class TestRequireApiKeyDetached:
 
         with patch("app.services.api_key_service.SessionLocal") as mock_session_local:
             mock_session_local.return_value.__enter__.return_value = db
-            result = await _require_api_key_detached(token=None, x_open_wearables_api_key=api_key.plain_key)
+            result = _require_api_key_detached(token=None, x_open_wearables_api_key=api_key.plain_key)
 
         assert result == str(api_key.id)
 
@@ -285,7 +285,7 @@ class TestRequireApiKeyDetached:
         with patch("app.services.api_key_service.SessionLocal") as mock_session_local:
             mock_session_local.return_value.__enter__.return_value = db
             with pytest.raises(AuthenticationError) as exc_info:
-                await _require_api_key_detached(token=None, x_open_wearables_api_key=None)
+                _require_api_key_detached(token=None, x_open_wearables_api_key=None)
 
         assert exc_info.value.status_code == 401
 
@@ -294,7 +294,7 @@ class TestRequireApiKeyDetached:
         with patch("app.services.api_key_service.SessionLocal") as mock_session_local:
             mock_session_local.return_value.__enter__.return_value = db
             with pytest.raises(HTTPException) as exc_info:
-                await _require_api_key_detached(token=None, x_open_wearables_api_key="nope")
+                _require_api_key_detached(token=None, x_open_wearables_api_key="nope")
 
         assert exc_info.value.status_code == 401
 
