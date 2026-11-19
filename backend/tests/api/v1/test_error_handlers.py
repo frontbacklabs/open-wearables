@@ -26,7 +26,7 @@ from app.utils.exceptions import (
     ServiceUnavailableError,
     WebhookVerificationError,
 )
-from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory
+from tests.factories import ApiKeyFactory, DeveloperFactory, UserFactory, fake_firebase_uid
 from tests.utils import api_key_headers, developer_auth_headers
 
 
@@ -176,7 +176,7 @@ class TestInvalidInput:
         with patch("app.middlewares.logger.log") as log:
             response = client.post(
                 f"{api_v1_prefix}/users",
-                json={"email": "jane.doe-at-example"},
+                json={"id": fake_firebase_uid(), "email": "jane.doe-at-example"},
                 headers=developer_auth_headers(developer.id),
             )
 
@@ -194,7 +194,7 @@ class TestInvalidInput:
 
         response = client.post(
             f"{api_v1_prefix}/users",
-            json={"email": "jane.doe-at-example", "first_name": "Jane" * 30},
+            json={"id": fake_firebase_uid(), "email": "jane.doe-at-example", "first_name": "Jane" * 30},
             headers=developer_auth_headers(developer.id),
         )
 

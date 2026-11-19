@@ -8,7 +8,6 @@ also fetches one day (``{polar_user, date, heart_rate_samples}``), while the
 
 from typing import Any
 from unittest.mock import patch
-from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
@@ -50,9 +49,7 @@ def test_continuous_hr_webhook_saves_the_single_day_response(db: Session) -> Non
     assert isinstance(data_247, Polar247Data)
 
     with patch.object(Polar247Data, "_make_api_request", return_value=DAY_RESPONSE):
-        saved = data_247.fetch_and_save_from_webhook(
-            db, UUID(str(user.id)), PolarWebhookEventType.CONTINUOUS_HEART_RATE, ENDPOINT
-        )
+        saved = data_247.fetch_and_save_from_webhook(db, user.id, PolarWebhookEventType.CONTINUOUS_HEART_RATE, ENDPOINT)
 
     assert saved == {"continuous_hr": 2}
     assert len(_polar_samples(db, user.id)) == 2
@@ -122,7 +119,7 @@ def test_process_payload_passes_a_dead_grant_to_the_task(db: Session) -> None:
     UserConnectionFactory(user_id=user.id, provider="polar", provider_user_id=POLAR_USER_ID)
     handler = PolarStrategy().webhooks
     assert isinstance(handler, PolarWebhookHandler)
-    dead_grant = ReauthRequiredError("polar", UUID(str(user.id)), "reconnection required")
+    dead_grant = ReauthRequiredError("polar", user.id, "reconnection required")
 
     with (
         patch.object(Polar247Data, "fetch_and_save_from_webhook", side_effect=dead_grant),
@@ -138,7 +135,7 @@ def test_activity_summary_webhook_requests_activity_zones(db: Session) -> None:
 
     with patch.object(Polar247Data, "_make_api_request", return_value={}) as request:
         data_247.fetch_and_save_from_webhook(
-            db, UUID(str(user.id)), PolarWebhookEventType.ACTIVITY_SUMMARY, "/v3/users/activities/2026-09-10"
+            db, user.id, PolarWebhookEventType.ACTIVITY_SUMMARY, "/v3/users/activities/2026-09-10"
         )
 
     assert request.call_args.kwargs["params"] == {"activity_zones": "true"}

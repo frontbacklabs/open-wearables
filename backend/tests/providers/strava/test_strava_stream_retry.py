@@ -48,7 +48,7 @@ class TestWebhookSchedulesRetry:
         ):
             mock_service.create.return_value = MagicMock(id=uuid4())
             workouts.process_push_activity(
-                db=MagicMock(), activity=_ACTIVITY, user_id=uuid4(), stream_retry_attempt=attempt
+                db=MagicMock(), activity=_ACTIVITY, user_id=str(uuid4()), stream_retry_attempt=attempt
             )
         return mock_schedule
 

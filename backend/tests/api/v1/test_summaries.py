@@ -532,7 +532,7 @@ class TestSleepSummaryEndpoint:
             },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 422
 
     def test_get_sleep_summary_pages_nights_not_sources(self, client: TestClient, db: Session) -> None:
         """Paging through nights two sources recorded returns what one big page does."""

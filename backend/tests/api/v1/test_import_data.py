@@ -114,7 +114,7 @@ class TestXMLImportEndpoint:
         assert response.status_code == 404
         mock_external_apis["s3"].generate_presigned_post.assert_not_called()
 
-    def test_generate_presigned_url_rejects_non_uuid_user_id(self, client: TestClient, db: Session) -> None:
+    def test_generate_presigned_url_unknown_string_user_id(self, client: TestClient, db: Session) -> None:
         headers = api_key_headers(ApiKeyFactory().plain_key)
 
         response = client.post(
@@ -123,7 +123,7 @@ class TestXMLImportEndpoint:
             json={"filename": "export.xml"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 404
 
 
 _SERVICE = "app.services.providers.apple.apple_xml.direct_upload_service"
@@ -161,7 +161,7 @@ class TestXMLDirectImportEndpoint:
         assert response.status_code == 404
         delay.assert_not_called()
 
-    def test_rejects_non_uuid_user_id(self, client: TestClient, db: Session) -> None:
+    def test_unknown_string_user_id_is_not_queued(self, client: TestClient, db: Session) -> None:
         headers = api_key_headers(ApiKeyFactory().plain_key)
 
         with patch(f"{_SERVICE}.process_xml_upload.delay") as delay:
@@ -171,7 +171,7 @@ class TestXMLDirectImportEndpoint:
                 files={"file": ("export.xml", b"<HealthData/>", "application/xml")},
             )
 
-        assert response.status_code == 422
+        assert response.status_code == 404
         delay.assert_not_called()
 
 

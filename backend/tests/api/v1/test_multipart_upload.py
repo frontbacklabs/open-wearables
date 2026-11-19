@@ -64,7 +64,7 @@ class TestCreateMultipart:
         assert response.status_code == 404
         mock_external_apis["s3"].create_multipart_upload.assert_not_called()
 
-    def test_create_rejects_non_uuid_user_id(
+    def test_create_unknown_string_user_id(
         self, client: TestClient, db: Session, mock_external_apis: dict[str, MagicMock]
     ) -> None:
         headers = api_key_headers(ApiKeyFactory().plain_key)
@@ -73,7 +73,7 @@ class TestCreateMultipart:
             headers=headers,
             json={"filename": "export.xml", "file_size": 200 * 1024 * 1024},
         )
-        assert response.status_code == 422
+        assert response.status_code == 404
         mock_external_apis["s3"].create_multipart_upload.assert_not_called()
 
 
@@ -227,15 +227,15 @@ class TestUserIdPath:
     @pytest.mark.parametrize(
         ("endpoint", "payload"),
         [
-            ("sign", {"key": "not-a-uuid/raw/x.xml", "upload_id": "u", "part_numbers": [1]}),
+            ("sign", {"key": "someone-else/raw/x.xml", "upload_id": "u", "part_numbers": [1]}),
             (
                 "complete",
-                {"key": "not-a-uuid/raw/x.xml", "upload_id": "u", "parts": [{"part_number": 1, "etag": "e1"}]},
+                {"key": "someone-else/raw/x.xml", "upload_id": "u", "parts": [{"part_number": 1, "etag": "e1"}]},
             ),
-            ("abort", {"key": "not-a-uuid/raw/x.xml", "upload_id": "u"}),
+            ("abort", {"key": "someone-else/raw/x.xml", "upload_id": "u"}),
         ],
     )
-    def test_rejects_non_uuid_user_id(
+    def test_rejects_foreign_key(
         self,
         client: TestClient,
         db: Session,
@@ -243,31 +243,31 @@ class TestUserIdPath:
         endpoint: str,
         payload: dict,
     ) -> None:
-        headers = api_key_headers(ApiKeyFactory().plain_key)
-        response = client.post(BASE.format(user_id="not-a-uuid") + f"/{endpoint}", headers=headers, json=payload)
-
-        assert response.status_code == 422
-        assert mock_external_apis["s3"].method_calls == []
-
-    def test_uppercase_user_id_maps_to_the_same_key(
-        self, client: TestClient, db: Session, mock_external_apis: dict[str, MagicMock]
-    ) -> None:
         user = UserFactory()
         headers = api_key_headers(ApiKeyFactory().plain_key)
-        upper_id = str(user.id).upper()
+        response = client.post(BASE.format(user_id=user.id) + f"/{endpoint}", headers=headers, json=payload)
+
+        assert response.status_code == 403
+        assert mock_external_apis["s3"].method_calls == []
+
+    def test_user_ids_are_case_sensitive(
+        self, client: TestClient, db: Session, mock_external_apis: dict[str, MagicMock]
+    ) -> None:
+        """Firebase UIDs are case-sensitive strings: a recased id is a different, unknown user."""
+        user = UserFactory()
+        headers = api_key_headers(ApiKeyFactory().plain_key)
+        recased_id = str(user.id).swapcase()
 
         created = client.post(
-            BASE.format(user_id=upper_id) + "/create",
+            BASE.format(user_id=recased_id) + "/create",
             headers=headers,
             json={"filename": "export.xml", "file_size": 200 * 1024 * 1024},
         )
-        assert created.status_code == 201
-        key = created.json()["key"]
-        assert key.startswith(f"{user.id}/raw/")
+        assert created.status_code == 404
 
         signed = client.post(
-            BASE.format(user_id=upper_id) + "/sign",
+            BASE.format(user_id=recased_id) + "/sign",
             headers=headers,
-            json={"key": key, "upload_id": "test-upload-id", "part_numbers": [1]},
+            json={"key": f"{user.id}/raw/export.xml", "upload_id": "test-upload-id", "part_numbers": [1]},
         )
-        assert signed.status_code == 200
+        assert signed.status_code == 403
