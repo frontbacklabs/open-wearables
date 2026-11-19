@@ -11,8 +11,9 @@ on:
       - "docs/openapi.json"
       # make init; its tests run with the backend tests
       - "scripts/**"
+  # No paths filter here: `gate` below must report on every PR or the required
+  # status check waits forever on changes outside backend/frontend/mcp/scripts.
   pull_request:
-    paths: *paths
 
 jobs:
   # Detect which parts of the codebase changed
@@ -358,3 +359,31 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  # Single check branch protection requires. Runs even when every real job is
+  # path-skipped; fails if any needed job failed or was cancelled.
+  gate:
+    name: gate
+    needs:
+      - changes
+      - backend-build
+      - backend-code-quality
+      - backend-openapi-spec
+      - backend-test
+      - backend-migrations
+      - mcp-build
+      - mcp-code-quality
+      - mcp-test
+      - frontend-build
+      - frontend-lint
+      - frontend-format-check
+      - frontend-test
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check job results
+        run: |
+          echo '${{ toJSON(needs) }}' | jq -e '
+            to_entries | map(.value.result) |
+            all(. == "success" or . == "skipped")
+          '
