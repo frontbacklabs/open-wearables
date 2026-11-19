@@ -1,0 +1,35 @@
+name: paperclip-merge-hook
+on:
+  pull_request_target:
+    types: [closed]
+permissions: {}
+jobs:
+  notify:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Wake Bobert in Paperclip
+        env:
+          HOOK_URL: ${{ secrets.PAPERCLIP_MERGE_HOOK_URL }}
+          HOOK_SECRET: ${{ secrets.PAPERCLIP_MERGE_HOOK_SECRET }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          MERGED_BY: ${{ github.event.pull_request.merged_by.login }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          set -euo pipefail
+          body=$(jq -cn \
+            --arg repo "$GITHUB_REPOSITORY" --argjson number "$PR_NUMBER" \
+            --arg title "$PR_TITLE" --arg url "$PR_URL" --arg base "$PR_BASE" \
+            --arg head "$PR_HEAD" --arg merged_by "$MERGED_BY" --arg merge_sha "$MERGE_SHA" \
+            '{event:"pr_merged",repo:$repo,number:$number,title:$title,url:$url,base:$base,head:$head,merged_by:$merged_by,merge_sha:$merge_sha}')
+          ts=$(date +%s)
+          sig=$(printf '%s.%s' "$ts" "$body" | openssl dgst -sha256 -hmac "$HOOK_SECRET" | awk '{print $NF}')
+          curl -fsS --retry 3 --retry-all-errors -X POST "$HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-Paperclip-Timestamp: $ts" -H "X-Paperclip-Signature: $sig" \
+            --data "$body"
