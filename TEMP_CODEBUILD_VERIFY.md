@@ -1,0 +1,1 @@
+Temporary file for FRO-172 verification: confirms the AWS CodeBuild commit status no longer posts on pull requests after ren-infra#36 set requires_comment_approval=DISABLED. This PR is closed unmerged; do not merge.
