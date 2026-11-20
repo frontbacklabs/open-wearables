@@ -705,6 +705,7 @@ class Oura247Data(Base247DataTemplate):
                     "start_time": start_time,
                     "end_time": end_time,
                     "duration_seconds": duration_seconds,
+                    "total_sleep_duration": sleep.total_sleep_duration,
                     "sleep_latency_seconds": sleep.latency,
                     "efficiency_percent": float(sleep.efficiency) if sleep.efficiency is not None else None,
                     "is_nap": sleep.type in {"sleep", "late_nap"},
@@ -797,7 +798,11 @@ class Oura247Data(Base247DataTemplate):
 
             detail = EventRecordDetailCreate(
                 record_id=sleep_id,
-                sleep_total_duration_minutes=seconds_to_minutes(deep_seconds, light_seconds, rem_seconds),
+                sleep_total_duration_minutes=(
+                    seconds_to_minutes(normalized_sleep.get("total_sleep_duration"))
+                    if normalized_sleep.get("total_sleep_duration") is not None
+                    else seconds_to_minutes(deep_seconds, light_seconds, rem_seconds)
+                ),
                 sleep_time_in_bed_minutes=time_in_bed_minutes,
                 sleep_latency_seconds=normalized_sleep.get("sleep_latency_seconds"),
                 sleep_efficiency_score=Decimal(str(normalized_sleep.get("efficiency_percent", 0)))

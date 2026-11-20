@@ -375,3 +375,13 @@ fork divergence.
     and #44 removed it; the response contract is upstream's shape. Do not
     re-add `id` (or a deprecated nullable copy) in a sync or review — if upstream
     reintroduces the field, take upstream's version and delete this rule.
+23. **Oura `sleep_total_duration_minutes` prefers the provider total.** In
+    `backend/app/services/providers/oura/data_247.py`, `save_sleep_data` stores
+    Oura's own `total_sleep_duration` (normalized into the `total_sleep_duration`
+    key) as `sleep_total_duration_minutes`, falling back to the deep+light+REM
+    stage sum only when the provider omits it. Upstream derives the value purely
+    from the stage sum; when Oura epochs are unclassified into a stage the sum
+    under-reports real sleep (observed ~222 min short on one production night,
+    frontbacklabs/ren-backend FRO-199). Sleep scores and nap inference consume
+    this field as net-asleep minutes, so the provider figure is authoritative.
+    Candidate for upstreaming.

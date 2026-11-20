@@ -229,7 +229,9 @@ class TestOura247SleepNormalization:
         assert detail.sleep_light_minutes is None
         assert detail.sleep_rem_minutes is None
         assert detail.sleep_awake_minutes is None
-        assert detail.sleep_total_duration_minutes is None
+        # Oura still reports the session's total asleep time without a stage
+        # breakdown, so the provider total stands on its own.
+        assert detail.sleep_total_duration_minutes == 450
         assert detail.sleep_time_in_bed_minutes == 480
 
     @patch("app.services.providers.oura.data_247.event_record_service")
@@ -245,7 +247,22 @@ class TestOura247SleepNormalization:
         assert detail.sleep_deep_minutes == 0
         assert detail.sleep_rem_minutes == 0
         assert detail.sleep_light_minutes == 240
-        assert detail.sleep_total_duration_minutes == 240
+        # The provider's own total_sleep_duration wins over the stage sum.
+        assert detail.sleep_total_duration_minutes == 450
+
+    @patch("app.services.providers.oura.data_247.event_record_service")
+    def test_missing_total_sleep_duration_falls_back_to_the_stage_sum(
+        self, mock_event: MagicMock, data_247: Oura247Data, sample_oura_sleep: dict
+    ) -> None:
+        sample_oura_sleep["total_sleep_duration"] = None
+        sample_oura_sleep["deep_sleep_duration"] = 0
+
+        normalized = data_247.normalize_sleeps([sample_oura_sleep], str(uuid4()))
+        data_247.save_sleep_data(MagicMock(), str(uuid4()), normalized)
+
+        detail = mock_event.create_or_merge_sleep.call_args[0][3]
+        # 0 + 14400 + 7200 seconds of stages.
+        assert detail.sleep_total_duration_minutes == 360
 
     def test_normalize_sleep_heart_rate(self, data_247: Oura247Data, sample_oura_sleep: dict) -> None:
         user_id = fake_firebase_uid()
