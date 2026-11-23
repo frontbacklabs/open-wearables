@@ -8,7 +8,7 @@ FRONTEND_URL and CORS_ORIGINS fallbacks would mask a missing entry.
 
 import re
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 BUILDSPEC_PATH = REPO_ROOT / "buildspec.yml"
@@ -36,7 +36,13 @@ def _entries(allowlist: str) -> tuple[set[str], set[str]]:
         if parts.scheme in _WEB_SCHEMES and parts.netloc:
             origins.add(f"{parts.scheme}://{parts.netloc}".lower())
         else:
-            callbacks.add(entry.split("?", 1)[0])
+            # Same normalization as redirect_allowlist._without_query: drop
+            # query and fragment, lowercase scheme and netloc.
+            callbacks.add(
+                urlunsplit(
+                    (parts.scheme.lower(), parts.netloc.lower(), parts.path, "", "")
+                )
+            )
     return origins, callbacks
 
 
