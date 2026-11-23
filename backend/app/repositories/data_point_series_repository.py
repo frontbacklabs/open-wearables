@@ -736,8 +736,9 @@ class DataPointSeriesRepository(
         """Get data points with filtering and keyset pagination.
 
         Returns (samples, total_count). The count is a full aggregate over the largest table in
-        the system, so it is taken on the first page only and is None on every page reached by
-        cursor; the total cannot change under a keyset page, so the caller keeps the first value.
+        the system, so it runs only when the caller asks for it (``include_total``) on the first
+        page, and is None otherwise; the total cannot change under a keyset page, so the caller
+        keeps the first value.
         """
         query = self._apply_sample_filters(
             db_session.query(self.model, DataSource)
@@ -753,7 +754,7 @@ class DataPointSeriesRepository(
             source_by_type,
         )
 
-        total_count = query.count() if params.cursor is None else None
+        total_count = query.count() if params.cursor is None and params.include_total else None
 
         is_asc = params.sort_order == "asc"
 

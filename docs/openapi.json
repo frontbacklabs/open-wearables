@@ -2579,6 +2579,18 @@
             }
           },
           {
+            "name": "include_total",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Return the exact number of matching samples as pagination.total_count on the first page of a raw read. The count scans every matching row, so it is off by default; cursor pages never carry it.",
+              "default": false,
+              "title": "Include Total"
+            },
+            "description": "Return the exact number of matching samples as pagination.total_count on the first page of a raw read. The count scans every matching row, so it is off by default; cursor pages never carry it."
+          },
+          {
             "name": "X-Open-Wearables-API-Key",
             "in": "header",
             "required": false,

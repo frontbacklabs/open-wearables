@@ -200,7 +200,7 @@ Data endpoints return a paginated envelope:
 }
 ```
 
-Pass `cursor=<next_cursor>` until `has_more` is `false`. `total_count` is only set on the first page. Health scores use `offset` / `limit` instead of a cursor.
+Pass `cursor=<next_cursor>` until `has_more` is `false`. `total_count` is only set on the first page, and on `/timeseries` raw reads only when `include_total=true` is passed. Health scores use `offset` / `limit` instead of a cursor.
 
 <CardGroup cols={2}>
   <Card title="Activity summary" icon="person-running" href="/api-reference/external:-summaries/get-activity-summary">

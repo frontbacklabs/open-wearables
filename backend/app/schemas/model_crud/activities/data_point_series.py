@@ -135,3 +135,9 @@ class TimeSeriesQueryParams(SourceFilterParams):
     )
     resolution: Resolution = Resolution.RAW
     sort_order: Literal["asc", "desc"] = Field("asc", description="Sort order")
+    include_total: bool = Field(
+        False,
+        description="Return the exact number of matching samples as pagination.total_count on the first page of a "
+        "raw read. The count scans every matching row of the largest table in the system, so it is off by "
+        "default; pages reached by cursor never carry it either way.",
+    )
