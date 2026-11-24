@@ -114,3 +114,62 @@ class TestTimeSeriesEndpoint:
         )
 
         assert response.status_code == 422
+
+    def test_total_count_is_null_by_default(self, client: TestClient, db: Session) -> None:
+        """A cursorless raw first page skips the COUNT unless include_total=true."""
+        user = UserFactory()
+        self._make_samples(user, count=3)
+        api_key = ApiKeyFactory()
+
+        response = client.get(
+            self._url(user.id),
+            headers=api_key_headers(api_key.plain_key),
+            params=self.BASE_PARAMS,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["pagination"]["total_count"] is None
+
+    def test_include_total_returns_count_on_first_page(self, client: TestClient, db: Session) -> None:
+        """include_total=true forwards through the route and reports the exact match count."""
+        user = UserFactory()
+        self._make_samples(user, count=3)
+        api_key = ApiKeyFactory()
+
+        response = client.get(
+            self._url(user.id),
+            headers=api_key_headers(api_key.plain_key),
+            params={**self.BASE_PARAMS, "include_total": "true"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["pagination"]["total_count"] == 3
+
+    def test_include_total_never_counts_cursor_pages(self, client: TestClient, db: Session) -> None:
+        """A page reached by cursor reports null even when include_total=true."""
+        user = UserFactory()
+        self._make_samples(user, count=5)
+        api_key = ApiKeyFactory()
+
+        first = client.get(
+            self._url(user.id),
+            headers=api_key_headers(api_key.plain_key),
+            params={**self.BASE_PARAMS, "include_total": "true", "limit": 2},
+        )
+
+        assert first.status_code == 200
+        assert first.json()["pagination"]["total_count"] == 5
+
+        second = client.get(
+            self._url(user.id),
+            headers=api_key_headers(api_key.plain_key),
+            params={
+                **self.BASE_PARAMS,
+                "include_total": "true",
+                "limit": 2,
+                "cursor": first.json()["pagination"]["next_cursor"],
+            },
+        )
+
+        assert second.status_code == 200
+        assert second.json()["pagination"]["total_count"] is None
