@@ -385,3 +385,20 @@ fork divergence.
     frontbacklabs/ren-backend FRO-199). Sleep scores and nap inference consume
     this field as net-asleep minutes, so the provider figure is authoritative.
     Candidate for upstreaming.
+24. **Raw timeseries `total_count` is opt-in.** `include_total` on
+    `TimeSeriesQueryParams` (`backend/app/schemas/model_crud/activities/data_point_series.py`),
+    the same-named query param on `GET /api/v1/users/{id}/timeseries`
+    (`backend/app/api/routes/v1/timeseries.py`), and the count guard in
+    `DataPointSeriesRepository.get_samples` (`params.cursor is None and
+    params.include_total`) exist because upstream's `get_samples` runs
+    `query.count()` over the `SeriesSample`×`DataSource` join on **every**
+    cursorless raw first page — a full aggregate over the largest table, paid
+    per request. Under the Nov 17+ Aurora read amplification (SDK sync surge
+    plus measurement-cacher hourly fan-out) that count was the largest
+    per-request read cost on the API surface (FRO-245). Default-off is the
+    point: an opt-out flag would keep the COUNT for every client that never
+    changes. `pagination.total_count` stays `null` unless `include_total=true`
+    — already the value for cursor pages and every non-raw resolution. Taking
+    upstream's unconditional count silently restores the amplification, so
+    keep the flag and guard through merges. Candidate for upstreaming; until
+    upstream ships an equivalent opt-in, this rule stays.

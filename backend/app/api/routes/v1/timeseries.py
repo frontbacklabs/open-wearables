@@ -49,6 +49,13 @@ def get_timeseries(
         False
     ),
     sort_order: Literal["asc", "desc"] = "asc",
+    include_total: Annotated[
+        bool,
+        Query(
+            description="Return the exact number of matching samples as pagination.total_count on the first page of a "
+            "raw read. The count scans every matching row, so it is off by default; cursor pages never carry it."
+        ),
+    ] = False,
 ) -> PaginatedResponse[TimeSeriesSample]:
     """Returns granular time series data (biometrics or activity)."""
     if source_selection is None:
@@ -80,5 +87,6 @@ def get_timeseries(
         device_model=device_model,
         data_source_id=data_source_id,
         sort_order=sort_order,
+        include_total=include_total,
     )
     return timeseries_service.get_timeseries(db, user_id, types, params, source_selection=source_selection)

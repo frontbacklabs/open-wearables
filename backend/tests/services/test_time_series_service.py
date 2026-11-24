@@ -646,15 +646,31 @@ class TestTimeSeriesServiceGetTimeseries:
                 )
         return user, watch, band
 
+    def test_total_count_is_opt_in(self, db: Session) -> None:
+        """The COUNT over the largest table is skipped unless the caller asks for it."""
+        # Arrange
+        user = self._minute_of_heart_rate(db, [60, 70, 80, 90])
+
+        # Act
+        result = timeseries_service.get_timeseries(db, user.id, [SeriesType.heart_rate], self._params(limit=2))
+
+        # Assert
+        assert result.pagination.total_count is None
+
     def test_total_count_is_taken_on_the_first_page_only(self, db: Session) -> None:
         """A full COUNT over the largest table is paid once; a keyset page cannot change it."""
         # Arrange
         user = self._minute_of_heart_rate(db, [60, 70, 80, 90])
 
         # Act
-        first = timeseries_service.get_timeseries(db, user.id, [SeriesType.heart_rate], self._params(limit=2))
+        first = timeseries_service.get_timeseries(
+            db, user.id, [SeriesType.heart_rate], self._params(limit=2, include_total=True)
+        )
         second = timeseries_service.get_timeseries(
-            db, user.id, [SeriesType.heart_rate], self._params(limit=2, cursor=first.pagination.next_cursor)
+            db,
+            user.id,
+            [SeriesType.heart_rate],
+            self._params(limit=2, cursor=first.pagination.next_cursor, include_total=True),
         )
 
         # Assert

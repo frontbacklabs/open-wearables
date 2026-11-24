@@ -179,7 +179,7 @@ class TestDataPointSeriesRepository:
         """Test that get_samples requires at least device_id or data_source_id."""
         # Arrange
         user = UserFactory()
-        query_params = TimeSeriesQueryParams()
+        query_params = TimeSeriesQueryParams(include_total=True)
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -224,7 +224,7 @@ class TestDataPointSeriesRepository:
         )
         series_repo.create(db, sample)
 
-        query_params = TimeSeriesQueryParams(device_model="device1")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -258,7 +258,7 @@ class TestDataPointSeriesRepository:
             result = series_repo.create(db, sample)
             sample_ids.append(result.id)
 
-        query_params = TimeSeriesQueryParams(data_source_id=mapping.id)
+        query_params = TimeSeriesQueryParams(include_total=True, data_source_id=mapping.id)
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -303,7 +303,7 @@ class TestDataPointSeriesRepository:
         )
         series_repo.create(db, sample)
 
-        query_params = TimeSeriesQueryParams(device_model="device1")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -347,6 +347,7 @@ class TestDataPointSeriesRepository:
         # Query with half-open interval [yesterday, now + 1s) to include both yesterday and now
         end_datetime = now + timedelta(seconds=1)
         query_params = TimeSeriesQueryParams(
+            include_total=True,
             device_model="device1",
             start_datetime=yesterday,
             end_datetime=end_datetime,
@@ -396,7 +397,7 @@ class TestDataPointSeriesRepository:
         )
         series_repo.create(db, sample2)
 
-        query_params = TimeSeriesQueryParams(device_model="device1", source="apple")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1", source="apple")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -429,7 +430,7 @@ class TestDataPointSeriesRepository:
             )
             series_repo.create(db, sample)
 
-        query_params = TimeSeriesQueryParams(device_model="device1")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -449,7 +450,7 @@ class TestDataPointSeriesRepository:
 
         # Note: Creating 1000+ records would be slow, so we just verify the limit exists
         # by checking the method implementation
-        query_params = TimeSeriesQueryParams(device_model="device1")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user.id)
@@ -647,7 +648,7 @@ class TestDataPointSeriesRepository:
         )
         series_repo.create(db, sample)
 
-        query_params = TimeSeriesQueryParams(device_model="device1")
+        query_params = TimeSeriesQueryParams(include_total=True, device_model="device1")
 
         # Act
         results, total_count = series_repo.get_samples(db, query_params, [SeriesType.heart_rate], user1.id)
