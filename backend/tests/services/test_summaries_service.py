@@ -926,6 +926,63 @@ class TestGetSleepSummaries:
         assert self._sleep_summary(db, service, user).interruptions_count is None
 
 
+    def test_main_sleep_and_nap_share_one_wake_date_total(self, db: Session, service: SummariesService) -> None:
+        """A nap and the main sleep ending the same local day aggregate into one
+        summary: duration_minutes is main-sleep time asleep only, nap_duration is
+        the nap's start-to-end time, and total is their sum."""
+        user = UserFactory()
+        ds = DataSourceFactory(user=user, provider=ProviderName.OURA, source="oura")
+        night = self._make_session(ds, "2026-01-01T23:00:00+00:00", "2026-01-02T07:00:00+00:00")
+        SleepDetailsFactory(event_record=night, sleep_total_duration_minutes=290, is_nap=False)
+        nap = self._make_session(ds, "2026-01-02T14:00:00+00:00", "2026-01-02T14:30:00+00:00")
+        SleepDetailsFactory(event_record=nap, sleep_total_duration_minutes=25, is_nap=True)
+
+        summary = self._sleep_summary(db, service, user)
+
+        assert summary.date == date(2026, 1, 2)
+        assert summary.duration_minutes == 290
+        assert summary.nap_count == 1
+        assert summary.nap_duration_minutes == 30
+        assert summary.total_duration_minutes == 320
+
+    def test_sessions_group_by_local_wake_date_across_utc_midnight(
+        self, db: Session, service: SummariesService
+    ) -> None:
+        """A +02:00 session ending 00:30 local belongs to that local wake date,
+        and a later same-day nap joins it even though both sit on the previous
+        UTC date."""
+        user = UserFactory()
+        ds = DataSourceFactory(user=user, provider=ProviderName.OURA, source="oura")
+        night = EventRecordFactory(
+            data_source=ds,
+            category="sleep",
+            type="sleep",
+            start_datetime=datetime(2026, 1, 1, 16, 30, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 1, 1, 22, 30, tzinfo=timezone.utc),
+            duration_seconds=6 * 3600,
+            zone_offset="+02:00",
+        )
+        SleepDetailsFactory(event_record=night, sleep_total_duration_minutes=350, is_nap=False)
+        nap = EventRecordFactory(
+            data_source=ds,
+            category="sleep",
+            type="sleep",
+            start_datetime=datetime(2026, 1, 2, 12, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 1, 2, 12, 30, tzinfo=timezone.utc),
+            duration_seconds=1800,
+            zone_offset="+02:00",
+        )
+        SleepDetailsFactory(event_record=nap, sleep_total_duration_minutes=25, is_nap=True)
+
+        summary = self._sleep_summary(db, service, user)
+
+        # Both sessions' local end dates are 2026-01-02 (+02:00), not 2026-01-01 UTC.
+        assert summary.date == date(2026, 1, 2)
+        assert summary.duration_minutes == 350
+        assert summary.nap_duration_minutes == 30
+        assert summary.total_duration_minutes == 380
+
+
 class TestSleepPagingPerDate:
     """A page holds `limit` nights, however many sources recorded each one."""
 
